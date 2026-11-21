@@ -93,7 +93,8 @@ is checked against the engine before it - the same prompts, compared token by to
 
 Kestrel's own measurements. Measured 2026-11-20 on one PC: a Radeon AI PRO R9700 (32 GB, over OCuLink) with a Ryzen AI
 MAX+ 395's Radeon 8060S as the helper GPU (128 GB of unified memory), Linux with ROCm. Model: DeepSeek-V4.1-Flash-1017,
-turboderp's EXL3 quant at 2.25 bits (`--ds4-quant exl3-2.25`), 262,144-token context, DSpark drafting on.
+turboderp's EXL3 quant at 2.25 bits (`--ds4-quant exl3-2.25`), 262,144-token context, DSpark drafting on, swap off
+(at this context it fits in RAM, and it is faster).
 
 | Prompt length | Prompt read (tokens/s) | Decode (tokens/s) |
 |---:|---:|---:|

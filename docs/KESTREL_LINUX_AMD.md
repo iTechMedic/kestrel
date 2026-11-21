@@ -76,10 +76,12 @@ sudo sysctl --system
 - `vm.watermark_scale_factor = 200`: the kernel frees memory earlier and in the background. A fresh 20K-token prompt
   went from 38.6-40 s with frequent 44-75 s outliers to a steady ~33.7 s.
 
-**No swap.** Fedora swaps to compressed RAM (zram) by default. With it, the engine's own memory was swapped out and
-faulted back in mid-answer; with it off, a day of live coding decoded about 7 tokens/s faster at the same context, and
-the slow answers mostly went away. Turn it off for good on Fedora (an empty file overrides the default; delete it to
-undo), then reboot:
+**Turn swap off: at this context it is safe and faster.** Even a full 262,144-token conversation fits in RAM on the
+reference PC without swap (about 10 GB stays free, see below), and every number in the README was measured with swap
+off. Fedora swaps to compressed RAM (zram) by default. With it, the engine's own memory was swapped out and faulted
+back in mid-answer; with it off, a day of live coding decoded about 7 tokens/s faster at the same context, and the slow
+answers mostly went away. Turn it off for good on Fedora (an empty file overrides the default; delete it to undo),
+then reboot:
 
 ```sh
 sudo touch /etc/systemd/zram-generator.conf
@@ -88,9 +90,9 @@ sudo touch /etc/systemd/zram-generator.conf
 `swapon --show` then prints nothing. On other distributions, turn off whatever swap is set up (`swapoff`, and its line
 in `/etc/fstab`). Without swap, `vm.swappiness` makes no difference; a lower one (10, or 1) with swap on did not help.
 
-Without swap, memory has to fit: the engine's own memory grows about 13 KB a token of context (about 4 GB at a full
-262K conversation), which on the reference PC still leaves about 10 GB free. On a PC with less RAM to spare, keep
-swap and expect the slower answers.
+Why it fits: the engine's own memory grows about 13 KB a token of context (about 4 GB at a full 262K conversation),
+which on the reference PC (128 GB, the helper's 100 GB pool included) still leaves about 10 GB free. On a PC with less
+RAM to spare, or with other big programs running beside Kestrel, keep swap on and expect the slower answers.
 
 ### GPU order and power
 
