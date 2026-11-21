@@ -324,6 +324,30 @@ class Loading(unittest.TestCase):
         self.assertIsNone(blind.fraction())
         self.assertIn("so far", text(D.loading(blind, 60)))
 
+    def test_a_first_start_measuring_this_pc(self):   # (maya-hy4: its choices measured once, before it is ready)
+        w = self.watch(["maya-hy4: measuring this PC once, before the first answer: the prompt route (up to 10 chunks "
+                        "of 4096 tokens) - on 56132 tokens of text, 300 s at most; remembered, the next starts skip it"],
+                       gpus=(0,))
+        self.assertTrue(w.measuring)
+        self.assertIn("Measuring this PC once", text(D.loading(w, 60)))
+        w = self.watch(["maya-hy4: measuring this PC once, before the first answer: the prompt route",
+                        "maya-hy4: measured this PC once in 23 s, before the first answer (...): the prompt route's "
+                        "rates remembered"], gpus=(0,))
+        self.assertFalse(w.measuring)
+        self.assertIn("Reading the model's weights", text(D.loading(w, 60)))
+        # (--drafting auto: the drafting trial in plain words with roughly how long, then the time left at the PC's pace)
+        w = self.watch(["maya-hy4: measuring this PC once, before the first answer: drafting (no drafting, the MTP "
+                        "block, the DFly2 drafter: a load and 3 short answers each) - on 56132 tokens of text; "
+                        "remembered, the next starts skip it"], gpus=(0,))
+        self.assertIn("which drafting answers fastest: 3 choices", w.measuring)
+        self.assertIn("one to two minutes", text(D.loading(w, 60)))
+        w = self.watch(["maya-hy4: measuring this PC once, before the first answer: drafting (no drafting, the MTP "
+                        "block: a load and 3 short answers each) - on 56132 tokens of text",
+                        "maya-hy4: measuring this PC: 1 of 2 choices done in 41 s - about 30 s more"], gpus=(0,))
+        self.assertEqual(w.measure_left, 30)
+        self.assertIn("2 choices", w.measuring)
+        self.assertIn("more)", text(D.loading(w, 60)))
+
 
 @unittest.skipIf(T is None, "Textual is not installed (./maya.sh --setup installs it)")
 class Start(unittest.IsolatedAsyncioTestCase):
