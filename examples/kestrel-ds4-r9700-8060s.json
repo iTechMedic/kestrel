@@ -1,0 +1,39 @@
+{
+  "exe": "/home/YOU/kestrel/build-hip/maya-ds4",
+  "args": ["--pack", "/home/YOU/Maya-data/models/DeepSeek-V4.1-Flash-1017-EXL3-2.25bpw/maya-ds4",
+           "--max-context", "262144", "--tp", "1", "--threads", "on", "--mmap-experts", "on",
+           "--reserve-mib", "1024", "--prefill-chunk", "32768", "--vision", "on", "--dspark", "on",
+           "--ssd-cache", "auto", "--dspark-conf", "0.4"],
+  "cwd": "/home/YOU/kestrel",
+  "tokenizer": "/home/YOU/Maya-data/models/DeepSeek-V4.1-Flash-1017-EXL3-2.25bpw/maya-ds4/tokenizer",
+  "backend": "hip",
+  "model_name": "deepseek-v4.1-flash",
+  "gpu": [0, 1],
+  "lib_dirs": ["/opt/rocm/lib"],
+  "sampling": {"temperature": 1.0, "top_p": 1.0},
+  "reasoning_effort": "high",
+  "thinking_budget": 8192,
+  "fit_max_tokens": true,
+  "port": 8000,
+  "host": "127.0.0.1",
+  "api_key": "",
+  "env": {
+    "KESTREL_DS4_HELPER": "1", "KESTREL_DS4_HELPER_GB": "100", "KESTREL_DS4_HELPER_EXL3": "1",
+    "KESTREL_DS4_FLOW_HELPER": "1", "KESTREL_DS4_WARM_CAP_GB": "14", "KESTREL_DS4_DSPARK_CUM": "0.2",
+    "KESTREL_DS4_PROMPT_PICK": "length:1024", "KESTREL_DS4_ROUTE_FUSE": "2", "KESTREL_DS4_DECODE_TRIM": "12",
+    "KESTREL_DS4_LANE_SPIN_US": "200", "KESTREL_DS4_RESIDENT_TOPK": "3", "KESTREL_DS4_AHEAD_EXL3": "1",
+    "EXL3_WMMA": "1", "EXL3_WMMA_GFX12": "1",
+    "DS4_RING_MB": "auto", "DS4_STREAM_PRIO": "0", "KESTREL_DS4_SLOT_KEEP": "1",
+    "DS4_ENGRAM_PREFETCH": "1", "DS4_ENGRAM_CACHE_MB": "4096",
+    "KESTREL_DS4_SPEC_STAGED": "1", "KESTREL_DS4_SPEC_STAGED_MIN": "4096",
+    "DS4_PROMPT_LIGHT": "64", "DS4_PROMPT_LIGHT_FILES": "64", "DS4_FILE_HOT_GB": "16", "DS4_X3_FAT_ROWS": "256"
+  },
+  "log": "/home/YOU/kestrel/kestrel-ds4.log",
+  "installer": {
+    "family": "deepseek",
+    "quant": "DeepSeek-V4.1-Flash-1017",
+    "ds4_quant": "exl3-2.25",
+    "model_dir": "/home/YOU/Maya-data/models/DeepSeek-V4.1-Flash-1017-EXL3-2.25bpw",
+    "thinking_budget_set": true
+  }
+}

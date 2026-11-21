@@ -223,6 +223,10 @@ else (a tuned copy, for example), name the one to start:
 `--bench` and `--report` take `--config` the same way. The dashboard's Models page switches between the installed
 models too.
 
+**A complete example config:** the reference PC's tuned DeepSeek config is in
+[examples/kestrel-ds4-r9700-8060s.json](examples/kestrel-ds4-r9700-8060s.json).
+[examples/README.md](examples/README.md) shows how to use it as a template for your own PC.
+
 - **Windows:** `START-KESTREL.bat` instead of `./kestrel.sh` - see [docs/WINDOWS.md](docs/WINDOWS.md).
 - **AMD:** [the AMD guide](docs/AMD_MAYA.md). Kestrel's tuned Linux setup for a Radeon card with a Radeon 8060S
   helper: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).

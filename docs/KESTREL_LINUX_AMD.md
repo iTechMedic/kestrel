@@ -120,6 +120,11 @@ config file it then starts from (its path is printed at the end).
 Stop Kestrel (Ctrl+C), open the config file the setup wrote and set its `"args"` and `"env"` to these. Paths in
 `<...>` are yours; keep the rest of the file as the setup wrote it.
 
+You can also start from a complete file instead:
+[examples/kestrel-ds4-r9700-8060s.json](../examples/kestrel-ds4-r9700-8060s.json) is this config with the server
+settings filled in. [examples/README.md](../examples/README.md) shows how to fill in your paths, GPUs and network
+access.
+
 The settings are written here under Kestrel's names (`KESTREL_...`). The setup and the dashboard write the same
 settings under the engine's own prefix (`MAYA_`, from upstream); either prefix works. Replace the setup's `"env"`
 with this one rather than adding to it: where a file has a setting under both prefixes, the `MAYA_` one counts. When
