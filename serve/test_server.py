@@ -56,6 +56,29 @@ class StampedLog(unittest.TestCase):
         self.assertEqual(lines[2:], ["maya ds4 serve: request 926: prompt 100 tokens", "  [maya] indented is not stamped"])
         self.assertEqual(len(re.findall(stamp, buf.getvalue())), 2)
 
+    def test_the_log_gets_the_lines_as_the_terminal_shows_them(self):
+        """The run's log (tee_server_log) holds the server's lines stamped and as [kestrel], like the terminal - it
+        used to get the raw [maya] text, the copy being taken above the StampedStdout."""
+        import io
+        import tempfile
+        from serve.server import ServerLogTee, StampedStdout, tee_server_log
+        term = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.object(sys, "stdout", StampedStdout(term)):
+            log = Path(d) / "kestrel-test.log"
+            tee_server_log(str(log))
+            tee_server_log(str(log))                   # a second call adds no second copy
+            print("[maya] request 1 done", flush=True)
+            print("an engine-style line", flush=True)
+            self.assertIsInstance(sys.stdout, StampedStdout)
+            self.assertIsInstance(sys.stdout.stream, ServerLogTee)
+            sys.stdout.stream.handle.close()
+            text = log.read_text(encoding="utf-8")
+        stamp = r"\d\d:\d\d:\d\d "
+        self.assertNotIn("[maya]", text)
+        self.assertRegex(text, "^" + stamp + r"\[kestrel\] request 1 done\nan engine-style line\n$")
+        self.assertRegex(term.getvalue(), stamp + r"\[kestrel\] this server's lines go to .*kestrel-test\.log too\n")
+        self.assertRegex(term.getvalue(), stamp + r"\[kestrel\] request 1 done\n")
+
 
 class ThinkingBudget(unittest.TestCase):
     """Real HTTP adapters must leave room for reasoning and a final answer at small output limits."""

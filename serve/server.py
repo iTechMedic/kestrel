@@ -7431,9 +7431,13 @@ class StampedStdout:
 
 def tee_server_log(path: str) -> None:
     """This server's own lines (`[maya] ...`) go to `path` as well as this terminal (MAYA_SERVER_LOG=0: terminal
-    only).  The engine's stderr is already appended there, so the file tells both sides of a request."""
+    only).  The engine's stderr is already appended there, so the file tells both sides of a request.  Under a
+    StampedStdout the copy is taken below it, so the log gets the line as the terminal shows it (its time, and
+    Kestrel's [kestrel] prefix) rather than the raw text print() wrote."""
     path = os.path.abspath(path)
-    if not path or isinstance(sys.stdout, ServerLogTee):
+    out = sys.stdout
+    inner = out.stream if isinstance(out, StampedStdout) else out
+    if not path or isinstance(inner, ServerLogTee):
         return
     try:
         handle = open(path, "a", encoding="utf-8", buffering=1)
@@ -7441,7 +7445,12 @@ def tee_server_log(path: str) -> None:
         print(f"[maya] this server's lines cannot also go to {path} ({e}): they stay on this terminal", flush=True)
         return
     print(f"[maya] this server's lines go to {path} too", flush=True)
-    sys.stdout = ServerLogTee(sys.stdout, handle)
+    tee = ServerLogTee(inner, handle)
+    if isinstance(out, StampedStdout):
+        with out.lock:
+            out.stream = tee
+    else:
+        sys.stdout = tee
 
 
 def main() -> int:
