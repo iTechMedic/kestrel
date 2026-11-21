@@ -119,6 +119,32 @@ Measured yours? `./kestrel.sh --bench`, then `./kestrel.sh --report`, and share 
 
 A token is about ¾ of a word. The first answers after a start are the slowest while the caches fill with what you use.
 
+### Reading the speed numbers
+
+The prompt speed in the log and on the dashboard's Monitor counts **only the tokens read new**. The part of a
+conversation Kestrel already holds from an earlier turn is reused and not counted. That is the same rule llama.cpp
+uses (its `prompt_n` leaves out `cache_n`), so the numbers compare with other engines' - but in everyday use they
+can look slow while the answers come quickly:
+
+- **Most of a conversation is reused.** Coding agents send the whole conversation every turn. In a live session on
+  the PC above, a turn with a 36,315-token conversation had 124 new tokens: the answer started after 1.1 s, and the
+  log showed that read as about 110 tokens/s. What you wait for is the 1.1 s.
+- **Short reads are slower per token.** Each pass over a prompt has a cost that hardly depends on its length:
+  every layer's experts have to reach the GPUs (most of this model does not fit in VRAM; the rest comes from RAM and
+  the SSD). Spread over more tokens, it costs less a token: the table above reads 8K tokens at 797 tokens/s and 64K
+  at 1,426. A tool output of a few hundred tokens takes a second or two, however low its tokens/s.
+- **Cold starts are slower.** The first prompts after a start read experts from the SSD until the caches fill.
+- **Kept conversations aren't read again.** With `KESTREL_DS4_SLOT_KEEP=1` (in the tuned config) a conversation
+  is kept across requests and restarts, so an agent session that comes back is not read again at all.
+
+Where it is slow for real: a large new prompt, such as a pasted document, is read at the table's rates - a
+100K-token one takes about 70 s on the PC above, longer on a smaller one.
+
+**Comparing with other engines:** compare the same model, prompt length, context and hardware. Headline numbers
+are often a short prompt from an empty context with the whole model in VRAM (llama.cpp's `llama-bench` default
+test is a 512-token prompt), or many requests at once added together. The table above is one request at a time,
+long prompts at full depth, with most of the model read from RAM and the SSD.
+
 ## Using it
 
 - **In the browser:** chat (kept in your browser, with search, pins and folders, per-chat instructions and thinking
