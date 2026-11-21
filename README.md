@@ -185,6 +185,18 @@ The setup shows every download before it starts it, builds everything once (20-4
 **starts the model**. Then open `http://127.0.0.1:8080`. Ctrl+C stops it, and `./kestrel.sh` starts it again right
 away.
 
+**Which model starts:** each setup writes a config file (`maya-<model>.json`) in the Kestrel folder, and
+`./kestrel.sh` starts the one used most recently. With several models installed, or a config you keep somewhere
+else (a tuned copy, for example), name the one to start:
+
+```sh
+./kestrel.sh --config /path/to/your-config.json
+./kestrel.sh --config /path/to/your-config.json --port 8000    # another port than the default 8080
+```
+
+`--bench` and `--report` take `--config` the same way. The dashboard's Models page switches between the installed
+models too.
+
 - **Windows:** `START-KESTREL.bat` instead of `./kestrel.sh` - see [docs/WINDOWS.md](docs/WINDOWS.md).
 - **AMD:** [the AMD guide](docs/AMD_MAYA.md). Kestrel's tuned Linux setup for a Radeon card with a Radeon 8060S
   helper: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).

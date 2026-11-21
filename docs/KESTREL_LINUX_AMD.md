@@ -171,11 +171,23 @@ What each one does (more in [SETTINGS.md](SETTINGS.md)):
 | `DS4_RING_MB=auto`, `DS4_STREAM_PRIO=0` | the copy ring sized from the measured link; copies at the default stream priority |
 | `--mmap-experts on`, `--ssd-cache auto`, `--reserve-mib 1024`, `--prefill-chunk 32768` | experts read from the files in place, a RAM store of whole experts sized to the free RAM, 1 GB of VRAM kept free, prompts read in chunks of up to 32K tokens |
 
-Then start it again with `./kestrel.sh`.
+Then start it again with `./kestrel.sh`. It starts the config used most recently in the Kestrel folder, so with
+other models installed too, name this one: `./kestrel.sh --config <the config file>`.
+
+You can also keep the tuned config outside the Kestrel folder, as the reference PC does: copy it anywhere (for
+example `~/kestrel-configs/kestrel-ds4.json`) and always start it by name:
+
+```sh
+cd ~/kestrel && ./kestrel.sh --config ~/kestrel-configs/kestrel-ds4.json
+```
+
+A setup run again then leaves your copy alone. A config can carry its own port and address (`"port": 8000`,
+`"host": "0.0.0.0"` with an `"api_key"`), or give them on the command line (`--port`, `--host`, `--api-key`).
 
 ## 6. Check it
 
-- **A quick test:** `./kestrel.sh --bench` (a few short prompts; decode and prompt speed).
+- **A quick test:** `./kestrel.sh --bench` (a few short prompts; decode and prompt speed). Add
+  `--config <the config file>` to test a config kept elsewhere, here and with `--report`.
 - **Long prompts:** the first prompt after a start is the slowest while the caches fill; time the second one. Watch
   the dashboard's Monitor for where experts are read from (VRAM, helper, RAM, SSD) and for SSD reads that don't stop.
 - **If something is slow or fails:** `./kestrel.sh --report` writes a report of the PC, the config and the engine's
