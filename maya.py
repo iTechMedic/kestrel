@@ -1434,7 +1434,7 @@ def check_hip_pc(a, installed=False, text_only=True) -> dict:
     if unvalidated:
         warn(f"{', '.join(unvalidated)} (RDNA 2) is experimental: it builds and has the portable kernels, but Kestrel has "
              "not been validated on such a card yet - please report how it goes in an issue "
-             "(https://github.com/iTechMedic/project-maya/issues)")
+             "(https://github.com/iTechMedic/kestrel/issues)")
     select_build_backend("hip")
     return {"backend": "hip", "gpus": chosen, "archs": sorted({g["arch"] for g in chosen}), "rocm": str(root),
             **({"rocm_bin": str(bindir)} if WIN else {})}

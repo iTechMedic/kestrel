@@ -77,6 +77,8 @@ class KestrelReleases(unittest.TestCase):
             (Path(d) / ".git").mkdir()
             with mock.patch.object(U, "origin_repo", return_value="mw00/project-maya"):
                 self.assertEqual(U.release_repo(d), U.KESTREL_REPO)
+            with mock.patch.object(U, "origin_repo", return_value="iTechMedic/project-maya"):   # (Kestrel's old home)
+                self.assertEqual(U.release_repo(d), U.KESTREL_REPO)
             with mock.patch.object(U, "origin_repo", return_value="someone/kestrel"):    # (a fork of Kestrel: its own)
                 self.assertEqual(U.release_repo(d), "someone/kestrel")
             self.assertEqual(U.release_repo(Path(d) / "no-git"), U.KESTREL_REPO)          # (an archive: Kestrel's)

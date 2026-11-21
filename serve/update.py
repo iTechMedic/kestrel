@@ -20,8 +20,9 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-KESTREL_REPO = "iTechMedic/project-maya"   # Kestrel's GitHub repository: its releases (change it here when it is renamed)
+KESTREL_REPO = "iTechMedic/kestrel"        # Kestrel's GitHub repository: its releases (change it here when it moves)
 UPSTREAM_REPOS = {"mw00/project-maya"}     # the project Kestrel forked: never asked for Kestrel's releases
+OLD_REPOS = {"itechmedic/project-maya"}    # where Kestrel lived before (lowercase): a folder cloned from it checks KESTREL_REPO
 REPO = KESTREL_REPO
 ISSUES = f"github.com/{KESTREL_REPO}/issues"
 UPDATE_EXIT = 75                    # the server's exit code that tells maya.py: updated, start again (EX_TEMPFAIL)
@@ -58,9 +59,10 @@ def origin_repo(root=ROOT) -> str:
 
 
 def release_repo(root=ROOT) -> str:
-    """Where this folder's releases come from: its origin on GitHub, unless that is upstream's (then Kestrel's)."""
+    """Where this folder's releases come from: its origin on GitHub, unless that is upstream's or Kestrel's old
+    repository (then Kestrel's)."""
     repo = origin_repo(root) if (Path(root) / ".git").exists() else REPO
-    return REPO if repo.lower() in UPSTREAM_REPOS else repo
+    return REPO if repo.lower() in UPSTREAM_REPOS | OLD_REPOS else repo
 
 
 def summary(notes: str) -> str:
