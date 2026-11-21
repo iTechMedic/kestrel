@@ -431,7 +431,7 @@ class Picker(unittest.TestCase):
         why = maya.model_option(args(model="hy4-flash-maya-xs", hy4_quant="maya-s"))
         self.assertIn("--hy4-quant says maya-s", why)
         why = maya.model_option(args(model="hy5"))
-        self.assertIn("not a model Maya knows", why)
+        self.assertIn("not a model Kestrel knows", why)
         self.assertIn("hy4-flash-maya-xs", why)
         a = args(model="minimax-maya-xs")                             # (the others as before)
         self.assertIsNone(maya.model_option(a))
@@ -480,7 +480,7 @@ class Gate(unittest.TestCase):
         why, said = self.check("hip", win=True)
         self.assertEqual(why, "")
         self.assertEqual(len(said), 2)
-        self.assertIn("Hy4-Flash on an AMD GPU under Windows is experimental: Maya's team has not tested it there",
+        self.assertIn("Hy4-Flash on an AMD GPU under Windows is experimental: Kestrel's team has not tested it there",
                       said[0])
         self.assertIn("docs/AMD_MAYA.md", said[0])
         self.assertEqual(said[1], ("hip", {"text_only": False}))
