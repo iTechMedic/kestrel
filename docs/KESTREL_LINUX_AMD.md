@@ -127,7 +127,7 @@ Stop Kestrel (Ctrl+C), open the config file the setup wrote and set its `"args"`
   "MAYA_DS4_HELPER": "1", "MAYA_DS4_HELPER_GB": "100", "MAYA_DS4_HELPER_EXL3": "1", "MAYA_DS4_FLOW_HELPER": "1",
   "MAYA_DS4_WARM_CAP_GB": "14",
   "MAYA_DS4_DSPARK_MAX": "5", "MAYA_DS4_DSPARK_CUM": "0.2",
-  "MAYA_DS4_PROMPT_PICK": "length:512", "MAYA_DS4_ROUTE_FUSE": "2", "MAYA_DS4_DECODE_TRIM": "12",
+  "MAYA_DS4_PROMPT_PICK": "length:1024", "MAYA_DS4_ROUTE_FUSE": "2", "MAYA_DS4_DECODE_TRIM": "12",
   "MAYA_DS4_LANE_SPIN_US": "200", "MAYA_DS4_RESIDENT_TOPK": "3", "MAYA_DS4_AHEAD_EXL3": "1",
   "EXL3_WMMA": "1", "EXL3_WMMA_GFX12": "1",
   "DS4_RING_MB": "auto", "DS4_STREAM_PRIO": "0", "MAYA_DS4_SLOT_KEEP": "1",
@@ -151,7 +151,7 @@ What each one does (more in [SETTINGS.md](SETTINGS.md)):
 | `MAYA_DS4_FLOW_HELPER=1` | in a prompt, an expert the helper holds is copied from its pool instead of read from the SSD |
 | `MAYA_DS4_WARM_CAP_GB=14` | 14 GB of experts in host RAM beside the helper's pool |
 | `--dspark on`, `--dspark-conf 0.4`, `MAYA_DS4_DSPARK_MAX=5`, `MAYA_DS4_DSPARK_CUM=0.2` | DSpark drafting: up to 5 drafted tokens a round, each kept above 0.4 confidence, verified while their combined chance stays above 0.2 (the same tokens as without drafting) |
-| `MAYA_DS4_PROMPT_PICK=length:512` | prompts of 512 tokens or more take the chunked prompt path, shorter ones the decode-window path |
+| `MAYA_DS4_PROMPT_PICK=length:1024` | prompts of 1,024 tokens or more take the chunked prompt path, shorter ones (most tool outputs) the decode-window path. At 512 the chunked path took ~1K-token tool outputs ~25% faster when their experts were in the page cache, but up to 2x slower when they came from the SSD, and it read ~12 GB from the SSD each time |
 | `MAYA_DS4_ROUTE_FUSE=2`, `MAYA_DS4_DECODE_TRIM=12` | fewer, fused kernel launches per decoded token (the same results, checked at load) |
 | `MAYA_DS4_LANE_SPIN_US=200` | the CPU lane's threads sleep sooner when idle, leaving the APU more of its shared power for the 8060S |
 | `MAYA_DS4_AHEAD_EXL3=1` | while decoding, the next layer's likely experts are read ahead from the files |
