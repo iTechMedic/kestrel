@@ -23,3 +23,7 @@ serve/fixtures/deepseek_v41/** -text
 serve/fixtures/minimax_m31/chat_template.jinja -text
 # GLM-5.3's data (the official chat template's sha256, the hashed corpora, the float fixtures): byte for byte
 data/glm-dsa/** -text
+
+# Kestrel: README.md is Kestrel's own, so a merge from upstream keeps it as it is. The driver is set once per clone
+# (git config merge.ours.driver true); a clone without it merges README.md as text.
+README.md merge=ours
