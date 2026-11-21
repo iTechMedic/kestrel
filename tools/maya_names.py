@@ -1,5 +1,7 @@
 """tools/maya_names.py - Maya's settings are MAYA_*; the older STRATA_* names still work as fallbacks: the environment
 and a config's "env" take either, the code reads MAYA_* (MAYA_X first, then STRATA_X), on disk and on screen they are MAYA_*.
+Kestrel: each setting is also KESTREL_X, its name in Kestrel's docs - read as MAYA_X wherever STRATA_X is (MAYA_X counts
+when both are set), so the engines, which read MAYA_X, need no change.
 
     alias_env(os.environ)    every STRATA_X that has no MAYA_X also sets MAYA_X (MAYA_X wins), so what a program reads and
                              what it starts (the engines) find the setting under the name they read
@@ -11,11 +13,15 @@ from __future__ import annotations
 import os
 
 OLD, NEW = "STRATA_", "MAYA_"
+KESTREL = "KESTREL_"            # (Kestrel's name for a setting: not OLD - a config that uses it is not rewritten)
 
 
 def shown(name: str) -> str:
     """A setting's name as users see it."""
-    return NEW + name[len(OLD):] if name.startswith(OLD) else name
+    for p in (OLD, KESTREL):
+        if name.startswith(p):
+            return NEW + name[len(p):]
+    return name
 
 
 def read_as(name: str) -> str:
@@ -24,16 +30,20 @@ def read_as(name: str) -> str:
 
 
 def alias_env(env) -> None:
-    """In place (os.environ too): every STRATA_X that has no MAYA_X sets MAYA_X (the MAYA_ one counts when both are set)."""
+    """In place (os.environ too): every STRATA_X or KESTREL_X that has no MAYA_X sets MAYA_X (the MAYA_ one counts when
+    both are set)."""
     for k, v in list(env.items()):
-        if k.startswith(OLD) and shown(k) not in env:
+        if k.startswith((OLD, KESTREL)) and shown(k) not in env:
             env[shown(k)] = v
 
 
-def both_names(name: str) -> tuple[str, str]:
-    """(MAYA_X, STRATA_X) for a setting under either name; a name with neither prefix is its own twice."""
+def both_names(name: str) -> tuple[str, str, str]:
+    """(MAYA_X, STRATA_X, KESTREL_X) for a setting under any of its names; a name with none of the prefixes is its own
+    three times."""
     m = shown(name)
-    return m, (OLD + m[len(NEW):] if m.startswith(NEW) else m)
+    if not m.startswith(NEW):
+        return m, m, m
+    return m, OLD + m[len(NEW):], KESTREL + m[len(NEW):]
 
 
 def lookup(env, name: str, default=None):

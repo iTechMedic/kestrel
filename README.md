@@ -36,8 +36,9 @@ git clone https://github.com/iTechMedic/kestrel.git && cd kestrel
 The first run asks which model you want, downloads it, builds everything once and **starts the model**. Then open
 `http://127.0.0.1:8080`. Windows: `START-KESTREL.bat` instead of `./kestrel.sh`. More in [Install](#install).
 
-More documentation: [docs/README.md](docs/README.md) (written for Project Maya; it applies to Kestrel too - use
-`./kestrel.sh` where it says `./maya.sh`, and `START-KESTREL.bat` where it says `START-MAYA.bat`).
+More documentation: [docs/README.md](docs/README.md), Project Maya's own docs, which apply to Kestrel too. Where they
+name Project Maya's start, run `./kestrel.sh` (Windows: `START-KESTREL.bat`), and a setting they spell with the `MAYA_`
+prefix also works as `KESTREL_...`.
 
 ## <a name="the-models"></a><a name="deepseek-v41-flash-1017-new"></a><a name="minimax-m31-flash-new"></a>Pick your model
 
@@ -124,7 +125,7 @@ A token is about ¾ of a word. The first answers after a start are the slowest w
   level, edit and regenerate, HTML previews), a live **Monitor** of the model and your hardware (down to what fills
   each GPU's memory), a context size and port you can change in Settings, and **Models**: every model set up on this
   machine, switching to another (Kestrel starts again with it) and each one's engine settings (context, GPUs, drafting,
-  images, memory), saved into its `maya-<model>.json`.
+  images, memory), saved into its config file.
 - **Models page:** the catalog lists every model Kestrel can set up, with its size. Download one with a progress bar, load it, unload
   the running one or delete one - no command line needed.
 - **Turbo:** one button beside the model's parameters sets the fastest settings for the model (greedy sampling, no
@@ -170,7 +171,7 @@ A token is about ¾ of a word. The first answers after a start are the slowest w
 
 | | |
 | --- | --- |
-| **GPU** | NVIDIA, compute capability 7.0 or newer (V100, RTX 20 and newer): one, or up to 16 that share the model. More VRAM is faster. Pascal (Tesla P40 / P100, GTX 10) is experimental, not validated yet. **AMD:** RX 7900 XT / XTX, Radeon AI PRO R9700 / RX 9070, Strix Halo and Gorgon Halo (Radeon 8060S / 8065S); RX 6800 / 6900 and Radeon PRO V620 / W6800 not validated yet; GLM-5.3-Flash and DeepSeek-V4.1-Flash-1017 read pictures there too - [docs/AMD_MAYA.md](docs/AMD_MAYA.md) |
+| **GPU** | NVIDIA, compute capability 7.0 or newer (V100, RTX 20 and newer): one, or up to 16 that share the model. More VRAM is faster. Pascal (Tesla P40 / P100, GTX 10) is experimental, not validated yet. **AMD:** RX 7900 XT / XTX, Radeon AI PRO R9700 / RX 9070, Strix Halo and Gorgon Halo (Radeon 8060S / 8065S); RX 6800 / 6900 and Radeon PRO V620 / W6800 not validated yet; GLM-5.3-Flash and DeepSeek-V4.1-Flash-1017 read pictures there too - [the AMD guide](docs/AMD_MAYA.md) |
 | **RAM** | 32 GB runs it. More RAM keeps more experts close and is faster |
 | **Disk** | **A fast NVMe SSD** with room for the model (~75 GB for GLM-5.3-Flash · Maya-XS, ~100 GB for GLM-5.3-Flash · Maya-S, ~160 GB for GLM-5.3-Flash · Maya-L, ~350 GB for DeepSeek V4.1 · Maya-S, ~470 GB for unsloth's Q8 GGUF of it, ~95 GB for MiniMax M3.1 · Maya-XS, ~110 GB for Hy4-Flash · Maya-XS, ~200 GB for MiniMax-M3.1-Flash's EXL3 quant) and its picture encoder (1.1 GB). Not a hard disk |
 | **System** | Linux (x86-64; a CPU with AVX2 is best), the NVIDIA driver, CUDA 12.x (CUDA 13 works for RTX 20 and newer, not for the V100 or Pascal), g++, Python 3.10+. Windows 10/11: [docs/WINDOWS.md](docs/WINDOWS.md). Not WSL2. AMD: ROCm 7 |
@@ -185,7 +186,7 @@ The setup shows every download before it starts it, builds everything once (20-4
 away.
 
 - **Windows:** `START-KESTREL.bat` instead of `./kestrel.sh` - see [docs/WINDOWS.md](docs/WINDOWS.md).
-- **AMD:** [docs/AMD_MAYA.md](docs/AMD_MAYA.md). Kestrel's tuned Linux setup for a Radeon card with a Radeon 8060S
+- **AMD:** [the AMD guide](docs/AMD_MAYA.md). Kestrel's tuned Linux setup for a Radeon card with a Radeon 8060S
   helper: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).
 - **Mac with Apple Silicon (experimental, GLM-5.3-Flash only):** `./kestrel.sh --backend metal` (on a Mac,
   `./kestrel.sh` picks Metal by itself) - see [docs/METAL.md](docs/METAL.md). Not tested with the real model yet: if
@@ -205,9 +206,10 @@ away.
 ## Something went wrong?
 
 Run **`./kestrel.sh --report`** (Windows: `START-KESTREL.bat --report`) right after a slow answer or an error, and
-attach the `maya-report.txt` it writes to a [GitHub issue](https://github.com/iTechMedic/kestrel/issues). It holds your
-hardware, your setup and the engine's speed lines; nothing is sent anywhere by itself. The engine's own log is
-`maya-<model>.log` in the Kestrel folder. Found a security problem? Report it privately: [SECURITY.md](SECURITY.md).
+attach the report file it writes (it prints where) to a [GitHub issue](https://github.com/iTechMedic/kestrel/issues).
+It holds your hardware, your setup and the engine's speed lines; nothing is sent anywhere by itself. The engine's own
+log is the `.log` file beside the model's config file in the Kestrel folder. Found a security problem? Report it
+privately: [SECURITY.md](SECURITY.md).
 
 - **The build stops** ("nvcc ... cannot build for these GPUs", "unsupported GNU version", or `cuda_profiler_api.h` /
   `nvtx3/nvToolsExt.h` missing): [docs/SETUP.md](docs/SETUP.md#if-the-build-fails) has the fix for each.
@@ -216,7 +218,7 @@ hardware, your setup and the engine's speed lines; nothing is sent anywhere by i
   more of it free: `START-KESTREL.bat --setup --vram-reserve-mib 2048`
   ([the expert pool's size](docs/SETTINGS.md#the-expert-pools-size)).
 - **Windows on a Strix Halo / Gorgon Halo: other programs run out of memory, or the setup warns about the page
-  file:** set the page file to the size the setup prints ([docs/AMD_MAYA.md](docs/AMD_MAYA.md)).
+  file:** set the page file to the size the setup prints ([the AMD guide](docs/AMD_MAYA.md)).
 - **The download stopped:** run `./kestrel.sh` again; it continues where it stopped.
 - **Port 8080 is in use:** Kestrel is already running, or `--port 8081` starts another one. Settings > Port moves
   Kestrel to another port for good (it starts again there).

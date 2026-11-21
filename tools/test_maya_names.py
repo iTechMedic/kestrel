@@ -41,9 +41,10 @@ class Names(unittest.TestCase):
         self.assertEqual(N.shown("STRATA_GLM_RESERVE_MB"), "MAYA_GLM_RESERVE_MB")
 
     def test_both_names_and_lookup(self):
-        self.assertEqual(N.both_names("MAYA_DS4_READ_ORDER"), ("MAYA_DS4_READ_ORDER", "STRATA_DS4_READ_ORDER"))
-        self.assertEqual(N.both_names("STRATA_DS4_READ_ORDER"), ("MAYA_DS4_READ_ORDER", "STRATA_DS4_READ_ORDER"))
-        self.assertEqual(N.both_names("PATH"), ("PATH", "PATH"))
+        names = ("MAYA_DS4_READ_ORDER", "STRATA_DS4_READ_ORDER", "KESTREL_DS4_READ_ORDER")   # (Kestrel's: the third)
+        self.assertEqual(N.both_names("MAYA_DS4_READ_ORDER"), names)
+        self.assertEqual(N.both_names("STRATA_DS4_READ_ORDER"), names)
+        self.assertEqual(N.both_names("PATH"), ("PATH", "PATH", "PATH"))
         env = {"STRATA_A": "1", "MAYA_B": "2", "STRATA_C": "old", "MAYA_C": "new"}
         self.assertEqual([N.lookup(env, n) for n in ("MAYA_A", "STRATA_A", "MAYA_B", "STRATA_B", "MAYA_C")],
                          ["1", "1", "2", "2", "new"])
@@ -53,11 +54,11 @@ class Names(unittest.TestCase):
     def test_export_env_gives_both_names(self):
         out = {"STRATA_X": "stale", "MAYA_Y": "shell"}
         N.export_env(out, {"STRATA_X": "1", "MAYA_Y": "2", "HIP_VISIBLE_DEVICES": "0", "N": 3})
-        self.assertEqual(out, {"STRATA_X": "1", "MAYA_X": "1", "STRATA_Y": "2", "MAYA_Y": "2",
-                               "HIP_VISIBLE_DEVICES": "0", "N": "3"})
+        self.assertEqual(out, {"STRATA_X": "1", "MAYA_X": "1", "KESTREL_X": "1", "STRATA_Y": "2", "MAYA_Y": "2",
+                               "KESTREL_Y": "2", "HIP_VISIBLE_DEVICES": "0", "N": "3"})
         both = {}                                                  # (a config naming one setting both ways: MAYA_ wins)
         N.export_env(both, {"MAYA_Z": "new", "STRATA_Z": "old"})
-        self.assertEqual(both, {"MAYA_Z": "new", "STRATA_Z": "new"})
+        self.assertEqual(both, {"MAYA_Z": "new", "STRATA_Z": "new", "KESTREL_Z": "new"})
 
 
 class EngineSeesMayaOnlySettings(unittest.TestCase):

@@ -22,7 +22,7 @@ of the next most-used experts sit in its share of the unified memory, and it com
 them over the PCIe link. The rest are read from the SSD as prompts need them.
 
 Other AMD setups (an RX 7900 XTX, two cards, a Strix Halo alone) work with the same steps; the numbers will differ.
-[AMD_MAYA.md](AMD_MAYA.md) covers every supported AMD GPU.
+[The AMD guide](AMD_MAYA.md) covers every supported AMD GPU.
 
 ## 2. BIOS
 
@@ -104,7 +104,7 @@ RAM to spare, or with other big programs running beside Kestrel, keep swap on an
 
 ## 4. Install Kestrel and the model
 
-Install ROCm first ([AMD_MAYA.md](AMD_MAYA.md) lists the packages per distribution), then:
+Install ROCm first ([the AMD guide](AMD_MAYA.md) lists the packages per distribution), then:
 
 ```sh
 git clone https://github.com/iTechMedic/kestrel.git && cd kestrel
@@ -120,26 +120,29 @@ config file it then starts from (its path is printed at the end).
 Stop Kestrel (Ctrl+C), open the config file the setup wrote and set its `"args"` and `"env"` to these. Paths in
 `<...>` are yours; keep the rest of the file as the setup wrote it.
 
+The settings are written here under Kestrel's names (`KESTREL_...`). The setup and the dashboard write the same
+settings under the engine's own prefix (`MAYA_`, from upstream); either prefix works. Replace the setup's `"env"`
+with this one rather than adding to it: where a file has a setting under both prefixes, the `MAYA_` one counts.
+
 ```json
-"args": ["--pack", "<model folder>/maya-ds4", "--max-context", "262144", "--tp", "1", "--threads", "on",
-         "--mmap-experts", "on", "--reserve-mib", "1024", "--prefill-chunk", "32768", "--vision", "on",
-         "--dspark", "on", "--ssd-cache", "auto", "--dspark-conf", "0.4"],
+"args": ["--pack", "<the pack folder, as the setup wrote it>", "--max-context", "262144", "--tp", "1",
+         "--threads", "on", "--mmap-experts", "on", "--reserve-mib", "1024", "--prefill-chunk", "32768",
+         "--vision", "on", "--dspark", "on", "--ssd-cache", "auto", "--dspark-conf", "0.4"],
 "gpu": [0, 1],
 "env": {
-  "MAYA_DS4_HELPER": "1", "MAYA_DS4_HELPER_GB": "100", "MAYA_DS4_HELPER_EXL3": "1", "MAYA_DS4_FLOW_HELPER": "1",
-  "MAYA_DS4_WARM_CAP_GB": "14",
-  "MAYA_DS4_DSPARK_MAX": "5", "MAYA_DS4_DSPARK_CUM": "0.2",
-  "MAYA_DS4_PROMPT_PICK": "length:1024", "MAYA_DS4_ROUTE_FUSE": "2", "MAYA_DS4_DECODE_TRIM": "12",
-  "MAYA_DS4_LANE_SPIN_US": "200", "MAYA_DS4_RESIDENT_TOPK": "3", "MAYA_DS4_AHEAD_EXL3": "1",
+  "KESTREL_DS4_HELPER": "1", "KESTREL_DS4_HELPER_GB": "100", "KESTREL_DS4_HELPER_EXL3": "1",
+  "KESTREL_DS4_FLOW_HELPER": "1", "KESTREL_DS4_WARM_CAP_GB": "14", "KESTREL_DS4_DSPARK_CUM": "0.2",
+  "KESTREL_DS4_PROMPT_PICK": "length:1024", "KESTREL_DS4_ROUTE_FUSE": "2", "KESTREL_DS4_DECODE_TRIM": "12",
+  "KESTREL_DS4_LANE_SPIN_US": "200", "KESTREL_DS4_RESIDENT_TOPK": "3", "KESTREL_DS4_AHEAD_EXL3": "1",
   "EXL3_WMMA": "1", "EXL3_WMMA_GFX12": "1",
-  "DS4_RING_MB": "auto", "DS4_STREAM_PRIO": "0", "MAYA_DS4_SLOT_KEEP": "1",
+  "DS4_RING_MB": "auto", "DS4_STREAM_PRIO": "0", "KESTREL_DS4_SLOT_KEEP": "1",
   "DS4_ENGRAM_PREFETCH": "1", "DS4_ENGRAM_CACHE_MB": "4096",
-  "MAYA_DS4_SPEC_STAGED": "1", "MAYA_DS4_SPEC_STAGED_MIN": "4096",
+  "KESTREL_DS4_SPEC_STAGED": "1", "KESTREL_DS4_SPEC_STAGED_MIN": "4096",
   "DS4_PROMPT_LIGHT": "64", "DS4_PROMPT_LIGHT_FILES": "64", "DS4_FILE_HOT_GB": "16", "DS4_X3_FAT_ROWS": "256"
 }
 ```
 
-> **One of these changes the answers:** `MAYA_DS4_RESIDENT_TOPK=3` computes only the 3 heaviest of each decoded
+> **One of these changes the answers:** `KESTREL_DS4_RESIDENT_TOPK=3` computes only the 3 heaviest of each decoded
 > token's 6 routed experts. It makes decoding faster and the answers slightly different from the full model (like the
 > dashboard's Turbo button does). Leave it out for the model's exact answers. Everything else here gives the same
 > answers as without it.
@@ -148,19 +151,19 @@ What each one does (more in [SETTINGS.md](SETTINGS.md)):
 
 | Setting | What it does |
 | --- | --- |
-| `MAYA_DS4_HELPER=1`, `MAYA_DS4_HELPER_GB=100` | visible GPU 1 (the 8060S) is the helper, with a 100 GB pool of the most-routed experts |
-| `MAYA_DS4_HELPER_EXL3=1` | the helper keeps and computes EXL3 experts itself |
-| `MAYA_DS4_FLOW_HELPER=1` | in a prompt, an expert the helper holds is copied from its pool instead of read from the SSD |
-| `MAYA_DS4_WARM_CAP_GB=14` | 14 GB of experts in host RAM beside the helper's pool |
-| `--dspark on`, `--dspark-conf 0.4`, `MAYA_DS4_DSPARK_MAX=5`, `MAYA_DS4_DSPARK_CUM=0.2` | DSpark drafting: up to 5 drafted tokens a round, each kept above 0.4 confidence, verified while their combined chance stays above 0.2 (the same tokens as without drafting) |
-| `MAYA_DS4_PROMPT_PICK=length:1024` | prompts of 1,024 tokens or more take the chunked prompt path, shorter ones (most tool outputs) the decode-window path. At 512 the chunked path took ~1K-token tool outputs ~25% faster when their experts were in the page cache, but up to 2x slower when they came from the SSD, and it read ~12 GB from the SSD each time |
-| `MAYA_DS4_ROUTE_FUSE=2`, `MAYA_DS4_DECODE_TRIM=12` | fewer, fused kernel launches per decoded token (the same results, checked at load) |
-| `MAYA_DS4_LANE_SPIN_US=200` | the CPU lane's threads sleep sooner when idle, leaving the APU more of its shared power for the 8060S |
-| `MAYA_DS4_AHEAD_EXL3=1` | while decoding, the next layer's likely experts are read ahead from the files |
+| `KESTREL_DS4_HELPER=1`, `KESTREL_DS4_HELPER_GB=100` | visible GPU 1 (the 8060S) is the helper, with a 100 GB pool of the most-routed experts |
+| `KESTREL_DS4_HELPER_EXL3=1` | the helper keeps and computes EXL3 experts itself |
+| `KESTREL_DS4_FLOW_HELPER=1` | in a prompt, an expert the helper holds is copied from its pool instead of read from the SSD |
+| `KESTREL_DS4_WARM_CAP_GB=14` | 14 GB of experts in host RAM beside the helper's pool |
+| `--dspark on`, `--dspark-conf 0.4`, `KESTREL_DS4_DSPARK_CUM=0.2` | DSpark drafting: up to 5 drafted tokens a round (the drafter's own limit), each kept above 0.4 confidence, verified while their combined chance stays above 0.2 (the same tokens as without drafting) |
+| `KESTREL_DS4_PROMPT_PICK=length:1024` | prompts of 1,024 tokens or more take the chunked prompt path, shorter ones (most tool outputs) the decode-window path. At 512 the chunked path took ~1K-token tool outputs ~25% faster when their experts were in the page cache, but up to 2x slower when they came from the SSD, and it read ~12 GB from the SSD each time |
+| `KESTREL_DS4_ROUTE_FUSE=2`, `KESTREL_DS4_DECODE_TRIM=12` | fewer, fused kernel launches per decoded token (the same results, checked at load) |
+| `KESTREL_DS4_LANE_SPIN_US=200` | the CPU lane's threads sleep sooner when idle, leaving the APU more of its shared power for the 8060S |
+| `KESTREL_DS4_AHEAD_EXL3=1` | while decoding, the next layer's likely experts are read ahead from the files |
 | `EXL3_WMMA=1`, `EXL3_WMMA_GFX12=1` | matrix-core prompt kernels for EXL3, including on RDNA 4 (the R9700) |
-| `MAYA_DS4_SLOT_KEEP=1` | conversations are kept across requests and restarts, so a returning agent session isn't read again |
+| `KESTREL_DS4_SLOT_KEEP=1` | conversations are kept across requests and restarts, so a returning agent session isn't read again |
 | `DS4_ENGRAM_PREFETCH=1`, `DS4_ENGRAM_CACHE_MB=4096` | a prompt's Engram rows are read ahead, with a 4 GB cache of them |
-| `MAYA_DS4_SPEC_STAGED=1`, `MAYA_DS4_SPEC_STAGED_MIN=4096` | in prompt chunks of 4,096 rows or more, a layer's first experts are copied while its attention still runs |
+| `KESTREL_DS4_SPEC_STAGED=1`, `KESTREL_DS4_SPEC_STAGED_MIN=4096` | in prompt chunks of 4,096 rows or more, a layer's first experts are copied while its attention still runs |
 | `DS4_PROMPT_LIGHT=64`, `DS4_PROMPT_LIGHT_FILES=64` | a prompt chunk's lightly used experts (under 64 rows) are computed on the helper instead of copied to the R9700, including ones read from the files |
 | `DS4_FILE_HOT_GB=16` | the 16 GB of file experts prompts use most are read through the page cache (and read ahead after loading), the rest unbuffered |
 | `DS4_X3_FAT_ROWS=256` | a prompt chunk's busiest experts (256 rows or more) are decoded once to FP16 and multiplied with the GPU library's matrix routines |
@@ -174,5 +177,5 @@ Then start it again with `./kestrel.sh`.
 - **A quick test:** `./kestrel.sh --bench` (a few short prompts; decode and prompt speed).
 - **Long prompts:** the first prompt after a start is the slowest while the caches fill; time the second one. Watch
   the dashboard's Monitor for where experts are read from (VRAM, helper, RAM, SSD) and for SSD reads that don't stop.
-- **If something is slow or fails:** `./kestrel.sh --report` writes `maya-report.txt` with the PC, the config and the
-  engine's speed lines; attach it to a [GitHub issue](https://github.com/iTechMedic/kestrel/issues).
+- **If something is slow or fails:** `./kestrel.sh --report` writes a report of the PC, the config and the engine's
+  speed lines and prints where it put it; attach that file to a [GitHub issue](https://github.com/iTechMedic/kestrel/issues).
