@@ -1,3 +1,35 @@
+<p align="center"><img src="serve/web/icon.svg" width="112" alt="Kestrel logo"></p>
+
+<h1 align="center">Kestrel</h1>
+
+<p align="center"><b>A fork of <a href="https://github.com/mw00/project-maya">Project Maya</a> with its own look, its own
+releases, and DeepSeek-V4.1-Flash engine work for AMD GPUs</b></p>
+
+Kestrel 0.1.0 is built on Project Maya v1.1.70. Start it with `./kestrel.sh` (Linux and macOS) or `START-KESTREL.bat`
+(Windows); everything after this section is Project Maya's README and applies to Kestrel too. What Kestrel changes is
+in its [releases](https://github.com/iTechMedic/kestrel/releases).
+
+### What to expect: DeepSeek-V4.1-Flash at 250K context
+
+| Prompt length | Prompt read (tokens/s) | Decode (tokens/s) |
+|---:|---:|---:|
+| 8K | 797 | 57.8 |
+| 32K | 1,385 | 53.6 |
+| 64K | 1,426 | 54.1 |
+| 128K | 1,416 | 49.8 |
+| **250K** | **1,217** | **51.0** |
+
+A 250,282-token prompt is read in about 3.5 minutes (206-208 s), and the answer then comes at about 51 tokens/s.
+
+Measured 2026-11-20 on one PC: a Radeon AI PRO R9700 (32 GB, over OCuLink) with a Ryzen AI MAX+ 395's Radeon 8060S as
+the helper GPU (128 GB of unified memory), Linux with ROCm. Model: DeepSeek-V4.1-Flash-1017, turboderp's EXL3 quant at
+2.25 bits (`--ds4-quant exl3-2.25`), 262,144-token context, DSpark drafting on. Fresh prompts with a fact to recall
+placed 10% in (recalled at every length), 256-token answers, greedy, thinking off; the second of two passes on one
+start. The config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own settings, and your numbers
+will depend on your GPUs, RAM and SSD.
+
+---
+
 <p align="center">English | <a href="README.ja.md">日本語</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.pt-BR.md">Português</a></p>
 
 <p align="center"><img src="assets/maya-logo.png" width="128" alt="Maya logo"></p>
