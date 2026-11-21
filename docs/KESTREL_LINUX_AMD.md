@@ -69,14 +69,28 @@ that checks `lspci` for the card and reboots once if it isn't there.
 ### Memory settings
 
 ```sh
-printf 'vm.watermark_scale_factor = 200\nvm.swappiness = 10\n' | sudo tee /etc/sysctl.d/90-kestrel.conf
+echo 'vm.watermark_scale_factor = 200' | sudo tee /etc/sysctl.d/90-kestrel.conf
 sudo sysctl --system
 ```
 
 - `vm.watermark_scale_factor = 200`: the kernel frees memory earlier and in the background. A fresh 20K-token prompt
   went from 38.6-40 s with frequent 44-75 s outliers to a steady ~33.7 s.
-- `vm.swappiness = 10`: less of the engine's memory is swapped out during long agent sessions (swap-ins fell from
-  ~1.3 GB to ~0.2 GB over the same session).
+
+**No swap.** Fedora swaps to compressed RAM (zram) by default. With it, the engine's own memory was swapped out and
+faulted back in mid-answer; with it off, a day of live coding decoded about 7 tokens/s faster at the same context, and
+the slow answers mostly went away. Turn it off for good on Fedora (an empty file overrides the default; delete it to
+undo), then reboot:
+
+```sh
+sudo touch /etc/systemd/zram-generator.conf
+```
+
+`swapon --show` then prints nothing. On other distributions, turn off whatever swap is set up (`swapoff`, and its line
+in `/etc/fstab`). Without swap, `vm.swappiness` makes no difference; a lower one (10, or 1) with swap on did not help.
+
+Without swap, memory has to fit: the engine's own memory grows about 13 KB a token of context (about 4 GB at a full
+262K conversation), which on the reference PC still leaves about 10 GB free. On a PC with less RAM to spare, keep
+swap and expect the slower answers.
 
 ### GPU order and power
 
