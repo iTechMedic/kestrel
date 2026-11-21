@@ -3435,7 +3435,8 @@ class Service:
             try:
                 cfg = json.loads(Path(self.config_path).read_text(encoding="utf-8-sig"))
                 secret = re.compile(r"key|token|secret|password", re.I)
-                env = {maya_names.shown(k): ("***" if secret.search(k) else v) for k, v in (cfg.get("env") or {}).items()}
+                # (env_in: a setting under several names as the one that counts - the value the engine runs with)
+                env = {k: ("***" if secret.search(k) else v) for k, v in (maya_names.env_in(cfg).get("env") or {}).items()}
                 out.append(f"Config: {Path(self.config_path).name}: args {' '.join(map(str, cfg.get('args') or []))}; "
                            f"gpu {cfg.get('gpu')}; env {json.dumps(env)}")
             except (OSError, ValueError):

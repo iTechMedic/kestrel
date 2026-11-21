@@ -1403,8 +1403,15 @@ def turbo_patch(cfg: dict) -> dict:
     env = TURBO_ENV_G53 if G53.config_is_glm_dsa(cfg) else TURBO_ENV.get(fam)
     if env and turbo_smallest_quant(cfg):              # (no expert cap on the 1-2 bit quants: see TURBO_NO_TOPK)
         env = {k: v for k, v in env.items() if not k.endswith("_RESIDENT_TOPK")}
-    if env and any(cur["env"].get(k) != v for k, v in env.items()):
-        patch["env"] = {**cur["env"], **env}
+    # (a setting may be in the config under any of its names - MAYA_, KESTREL_ or STRATA_: compared by whichever is
+    #  there, and written under the MAYA_ name with the others dropped, so no other name outranks Turbo's value later)
+    if env and any(maya_names.lookup(cur["env"], k) != v for k, v in env.items()):
+        merged = dict(cur["env"])
+        for k, v in env.items():
+            for name in maya_names.both_names(k):
+                merged.pop(name, None)
+            merged[k] = v
+        patch["env"] = merged
     return patch
 
 
@@ -1420,7 +1427,7 @@ def turbo_info(cfg: dict) -> dict:
     patch = turbo_patch(cfg)
     return {"on": False, "family": family(cfg),
             "plan": {k: {"from": cur.get(k), "to": v} for k, v in patch.items() if k != "env"},
-            "env": {k: v for k, v in (patch.get("env") or {}).items() if cur["env"].get(k) != v}}
+            "env": {k: v for k, v in (patch.get("env") or {}).items() if cur["env"].get(k) != v and maya_names.lookup(cur["env"], k) != v}}
 
 
 def turbo_enable(path: Path) -> dict:

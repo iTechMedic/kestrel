@@ -83,6 +83,55 @@ class KestrelNames(unittest.TestCase):
         self.assertEqual(out, env["KESTREL_DS4_PROMPT_PICK"])
 
 
+class NameOrder(unittest.TestCase):
+    def test_kestrel_over_strata_in_any_order(self):
+        """A setting as STRATA_X and KESTREL_X (no MAYA_X): KESTREL_X counts, whichever comes first."""
+        for pairs in ((("STRATA_DS4_HELPER_GB", "60"), ("KESTREL_DS4_HELPER_GB", "100")),
+                      (("KESTREL_DS4_HELPER_GB", "100"), ("STRATA_DS4_HELPER_GB", "60"))):
+            env = dict(pairs)
+            N.alias_env(env)
+            self.assertEqual(env["MAYA_DS4_HELPER_GB"], "100", pairs)
+            self.assertEqual(N.env_in({"env": dict(pairs)})["env"], {"MAYA_DS4_HELPER_GB": "100"}, pairs)
+            child = {}
+            N.export_env(child, dict(pairs))
+            self.assertEqual(child["MAYA_DS4_HELPER_GB"], "100", pairs)
+            with_maya = dict(pairs + (("MAYA_DS4_HELPER_GB", "14"),))
+            self.assertEqual(N.env_in({"env": with_maya})["env"], {"MAYA_DS4_HELPER_GB": "14"})   # (MAYA_ first)
+
+
+class TurboKestrelNames(unittest.TestCase):
+    """The dashboard's Turbo with a config written under Kestrel's names (the Linux guide's)."""
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def cfg(self, **env):
+        from serve import models as M
+        from serve.test_models import ds4_cfg
+        cfg = M.read(ds4_cfg(self.d))
+        cfg["env"] = {**{k: v for k, v in (cfg.get("env") or {}).items() if "RAM_SKIP_W" not in k and
+                         "DSPARK_CUM" not in k and "RESIDENT_TOPK" not in k}, **env}
+        return M, cfg
+
+    def test_same_values_under_kestrel_names_change_nothing(self):
+        M, cfg = self.cfg(KESTREL_DS4_RAM_SKIP_W="0.14", KESTREL_DS4_DSPARK_CUM="0.3", KESTREL_DS4_RESIDENT_TOPK="3")
+        self.assertNotIn("env", M.turbo_patch(cfg))
+        self.assertEqual(M.turbo_info(cfg)["env"], {})
+
+    def test_a_change_is_written_once_under_the_name_that_counts(self):
+        M, cfg = self.cfg(KESTREL_DS4_RAM_SKIP_W="0.14", KESTREL_DS4_DSPARK_CUM="0.2", KESTREL_DS4_RESIDENT_TOPK="3",
+                          KESTREL_DS4_HELPER="1")
+        env = M.turbo_patch(cfg)["env"]
+        self.assertEqual(env["MAYA_DS4_DSPARK_CUM"], "0.3")
+        self.assertNotIn("KESTREL_DS4_DSPARK_CUM", env)        # (no second name left to outrank it later)
+        self.assertEqual(env["KESTREL_DS4_HELPER"], "1")       # (a setting Turbo does not touch keeps its name)
+        self.assertEqual(M.turbo_info(cfg)["env"], {"MAYA_DS4_DSPARK_CUM": "0.3"})
+
+
 class DocsNameRealSettings(unittest.TestCase):
     def test_every_kestrel_name_in_the_docs_is_read_by_the_code(self):
         """A KESTREL_ name in README.md or docs/KESTREL_LINUX_AMD.md must be a MAYA_ setting some source reads (a typo,
@@ -91,7 +140,8 @@ class DocsNameRealSettings(unittest.TestCase):
         self.assertIn("KESTREL_DS4_PROMPT_PICK", names)
         src = []
         for top in ("src", "include", "serve", "tools"):
-            src += [f for f in (ROOT / top).rglob("*") if f.suffix in (".cpp", ".cu", ".cuh", ".h", ".hpp", ".mm", ".py")]
+            src += [f for f in (ROOT / top).rglob("*") if f.suffix in (".cpp", ".cu", ".cuh", ".h", ".hpp", ".mm", ".py")
+                    and not f.name.startswith("test_")]   # (a test's own quoted names are no proof the code reads one)
         src.append(ROOT / "maya.py")
         text = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in src)
         for n in names:

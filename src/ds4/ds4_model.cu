@@ -801,6 +801,7 @@ struct Chunk {
     float *lt_hx = nullptr, *lt_hy = nullptr;
     int *lt_hb = nullptr, *lt_prow = nullptr, *lt_lidx = nullptr, *lt_dprow = nullptr, *lt_dlidx = nullptr;
     int lt_lcap = 0;
+    bool lt_ready = false;   // (Kestrel: all of the above made - light_send's setup sets it only when every piece is)
     cudaStream_t lt_st = nullptr;
     cudaEvent_t lt_g = nullptr, lt_h = nullptr;
     uint16_t* lt_hh = nullptr;
@@ -2312,10 +2313,10 @@ struct Model::Impl {
     std::vector<ProfMark> prof_marks;
     std::vector<std::vector<cudaEvent_t>> prof_pool;   // CUDA events belong to the device that created them
     bool prof_failed = false;
-    bool prof_window = false;   // (decode windows only: T == 1)
+    std::atomic<bool> prof_window{false};   // (decode windows only: T == 1.  Kestrel: atomic - the helper and service threads read it)
     // ... and a run of chunks' (prof_chunk): a layer's start, after its attention, after the routing and the shared
     // expert, after its experts (the streamed ones' waits for their reads in it); printed after the run
-    bool prof_chunk = false;
+    std::atomic<bool> prof_chunk{false};   // (Kestrel: atomic, as prof_window)
     double cprof_ms[8] = {};   // (4, 5: the attention's projections, its compression and indexer; 6, 7: its q, its
                                // sparse attention - 1 then its output's projections)
     double hprof_ms[8] = {}, hprof_last = 0;   // (the host's time between the same marks: one GPU)
@@ -2528,6 +2529,8 @@ struct Model::Impl {
         }
         hq_cv.notify_all();
         if (helper_th.joinable()) helper_th.join();
+        for (size_t i = 0; i < chunks.size() && i < devs.size(); ++i)   // (Kestrel: the light and busy-expert buffers)
+            if (chunks[i]) chunk_extra_free(devs[i], *chunks[i]);
         {   // (DS4_HELPER_RECENT) its fill thread: a copy under way ends bounded (hr_loop) - then the pool may go
             std::lock_guard<std::mutex> lk(hr_mu);
             hr_quit = true;
@@ -5918,6 +5921,15 @@ struct Model::Impl {
         }();
         return n;
     }
+    // (Kestrel) the busy experts' scratch freed - on the chunk's device, which the caller has set
+    static void fat_free(Chunk& c) {
+        if (c.fat_w != nullptr) cudaFree(c.fat_w);
+        if (c.fat_x != nullptr) cudaFree(c.fat_x);
+        if (c.fat_gu != nullptr) cudaFree(c.fat_gu);
+        c.fat_w = c.fat_x = nullptr;
+        c.fat_gu = nullptr;
+        c.fat_r = c.fat_ff = 0;
+    }
     bool x3_fat_ready(Dev& d, Chunk& c, int D, int FF) {
         if (x3_fat_rows() <= 0 || c.fat_off) return false;
         if (c.fat_w != nullptr) return FF <= c.fat_ff;   // (wider than allocated: the tiles take it)
@@ -5932,6 +5944,7 @@ struct Model::Impl {
             cudaMalloc(&c.fat_x, (size_t) R * D * 2) != cudaSuccess ||
             cudaMalloc(&c.fat_gu, (size_t) R * 2 * FF * 4) != cudaSuccess) {
             cudaGetLastError();
+            fat_free(c);   // (Kestrel: the pieces that were made, not kept for a path that stays off)
             std::fprintf(stderr, "ds4: CUDA%d: no VRAM for the busy EXL3 experts' path (%.0f MB): the tiles take them\n",
                          d.id, mb);
             c.fat_off = true;
@@ -5976,26 +5989,36 @@ struct Model::Impl {
         cudaStream_t s = d.st;
         const x3::Mat mg = x3_part(lay, blob, 0, D, FF), mu = x3_part(lay, blob, 1, D, FF), md = x3_part(lay, blob, 2, FF, D);
         uint16_t *wg = c.fat_w, *wu = c.fat_w + (size_t) FF * D, *wd = c.fat_w + (size_t) 2 * FF * D;
+        // (Kestrel: the EXL3 launches report a failure only through x3::launch_errors - checked before each GEMM reads
+        //  what they wrote, so a failed decode or rotation never reaches the layer's output as stale rows)
+        const int e0 = x3::launch_errors();
+        const auto launched = [&](const char* what) {
+            if (x3::launch_errors() == e0) return true;
+            err = std::string("the busy EXL3 experts' ") + what + " failed (" + std::to_string(x3::launch_errors() - e0) +
+                  " launch errors)";
+            return false;
+        };
         x3::reconstruct_inner_rows(mg, wg, s);
         x3::reconstruct_inner_rows(mu, wu, s);
         x3::reconstruct_inner_rows(md, wd, s);
+        if (!launched("decode")) return false;
         float *G = c.fat_gu, *U = c.fat_gu + (size_t) c.fat_r * FF;
         for (int p0 = 0; p0 < n; p0 += c.fat_r) {
             const int np = std::min(c.fat_r, n - p0);
             const int* idx = c.row_tok + row + p0;
             x3::rows_rot_f16(c.x, D, idx, np, D, mg.suh, c.fat_x, s);
-            if (!x3_fat_gemm(d, c, wg, FF, D, c.fat_x, D, np, G, FF, err)) return false;
+            if (!launched("rotation") || !x3_fat_gemm(d, c, wg, FF, D, c.fat_x, D, np, G, FF, err)) return false;
             x3::rows_rot_f16(c.x, D, idx, np, D, mu.suh, c.fat_x, s);
-            if (!x3_fat_gemm(d, c, wu, FF, D, c.fat_x, D, np, U, FF, err)) return false;
+            if (!launched("rotation") || !x3_fat_gemm(d, c, wu, FF, D, c.fat_x, D, np, U, FF, err)) return false;
             x3::rows_rot_out(G, FF, np, FF, mg.svh, s);
             x3::rows_rot_out(U, FF, np, FF, mu.svh, s);
             swiglu(G, U, np * FF, limit, G, s);   // (in place: each value from its own gate and up)
             x3::rows_rot_f16(G, FF, nullptr, np, FF, md.suh, c.fat_x, s);
             float* y = c.y + (size_t) (row - a + p0) * D;
-            if (!x3_fat_gemm(d, c, wd, D, FF, c.fat_x, FF, np, y, D, err)) return false;
+            if (!launched("rotation") || !x3_fat_gemm(d, c, wd, D, FF, c.fat_x, FF, np, y, D, err)) return false;
             x3::rows_rot_out(y, D, np, D, md.svh, s);
         }
-        return true;
+        return launched("rotation");
     }
     // y[r][c] = alpha x16[r] . W[c] for F16 weights W [n][k] (the indexer's weights_proj)
     bool gemm_f16w(Chunk& c, const uint16_t* W, int n, int k, const uint16_t* x16, int ldx, int rows, float alpha,
@@ -7287,39 +7310,44 @@ struct Model::Impl {
                     const std::vector<int>& b, int T, std::string& err) {
         const int D = g.dim, cap = light_rows_cap(), R = std::max(prompt_light(), light_files()), nr = T * L0.k_exp;
         cudaStream_t s = d.st;
-        if (c.lt_hx == nullptr) {   // (once: the lead's buffers, the helper's stream and scratch)
-            bool ok = cudaHostAlloc((void**) &c.lt_hx, (size_t) cap * D * 4, cudaHostAllocMapped | cudaHostAllocPortable) ==
-                          cudaSuccess &&
-                      cudaHostAlloc((void**) &c.lt_hy, (size_t) cap * D * 4, cudaHostAllocMapped | cudaHostAllocPortable) ==
-                          cudaSuccess &&
-                      cudaHostAlloc((void**) &c.lt_hb, (size_t) (g.n_exp + 1) * 4,
-                                    cudaHostAllocMapped | cudaHostAllocPortable) == cudaSuccess &&
-                      cudaHostAlloc((void**) &c.lt_prow, (size_t) cap * 4, cudaHostAllocDefault) == cudaSuccess &&
-                      cudaMalloc((void**) &c.lt_dprow, (size_t) cap * 4) == cudaSuccess &&
-                      cudaEventCreateWithFlags(&c.lt_g, cudaEventDisableTiming) == cudaSuccess;
+        if (!c.lt_ready) {   // (once: the lead's buffers, the helper's stream and scratch)
+            // (Kestrel: each piece made only if it is not there yet and the chunk marked ready only when all are - a
+            //  setup that failed part way is finished by the next prompt's, never skipped with a piece left null; the
+            //  pieces made stay for that retry, the stream with the scratch prepare() keyed to it)
+            const auto host = [](auto** p, size_t n, unsigned fl) {
+                return *p != nullptr || cudaHostAlloc((void**) p, n, fl) == cudaSuccess;
+            };
+            const auto dev = [](auto** p, size_t n) { return *p != nullptr || cudaMalloc((void**) p, n) == cudaSuccess; };
+            const auto event = [](cudaEvent_t* e) {
+                return *e != nullptr || cudaEventCreateWithFlags(e, cudaEventDisableTiming) == cudaSuccess;
+            };
+            bool ok = host(&c.lt_hx, (size_t) cap * D * 4, cudaHostAllocMapped | cudaHostAllocPortable) &&
+                      host(&c.lt_hy, (size_t) cap * D * 4, cudaHostAllocMapped | cudaHostAllocPortable) &&
+                      host(&c.lt_hb, (size_t) (g.n_exp + 1) * 4, cudaHostAllocMapped | cudaHostAllocPortable) &&
+                      host(&c.lt_prow, (size_t) cap * 4, cudaHostAllocDefault) && dev(&c.lt_dprow, (size_t) cap * 4) &&
+                      event(&c.lt_g);
             if (ok && light_files() > 0) {   // (the files' slots, as large as any layer's blob, and their readers)
                 size_t mb = 0;
                 for (const Layer& y : L)
                     if (!y.mtp && y.lay.fmt != gg::kFmtMXFP4) mb = std::max<size_t>(mb, y.blob);
                 c.lf_stride = (mb + 4095) & ~(size_t) 4095;
                 c.lf_slots_n = lf_slots();
-                ok = c.lf_stride > 0 && cudaHostAlloc((void**) &c.lf_stage, (size_t) c.lf_slots_n * c.lf_stride,
-                                                      cudaHostAllocMapped | cudaHostAllocPortable) == cudaSuccess;
-                if (ok) c.lf_readers = std::make_unique<Pool>(lf_readers_n(), std::vector<int>{}, 50);
+                ok = c.lf_stride > 0 && host(&c.lf_stage, (size_t) c.lf_slots_n * c.lf_stride,
+                                             cudaHostAllocMapped | cudaHostAllocPortable);
+                if (ok && !c.lf_readers) c.lf_readers = std::make_unique<Pool>(lf_readers_n(), std::vector<int>{}, 50);
             }
             ok = ok && cudaSetDevice(helper_id) == cudaSuccess &&
-                 cudaStreamCreateWithFlags(&c.lt_st, cudaStreamNonBlocking) == cudaSuccess &&
-                 (pk.gguf ? gg::prepare(c.lt_st) : x3::prepare(c.lt_st)) &&
-                 cudaMalloc((void**) &c.lt_hh, (size_t) R * g.ff * 2) == cudaSuccess &&
-                 cudaMalloc((void**) &c.lt_ident, (size_t) cap * 4) == cudaSuccess &&
-                 cudaEventCreateWithFlags(&c.lt_h, cudaEventDisableTiming) == cudaSuccess &&
-                 (light_files() <= 0 || cudaEventCreateWithFlags(&c.lf_h, cudaEventDisableTiming) == cudaSuccess);
+                 (c.lt_st != nullptr || cudaStreamCreateWithFlags(&c.lt_st, cudaStreamNonBlocking) == cudaSuccess) &&
+                 (pk.gguf ? gg::prepare(c.lt_st) : x3::prepare(c.lt_st)) && dev(&c.lt_hh, (size_t) R * g.ff * 2) &&
+                 dev(&c.lt_ident, (size_t) cap * 4) && event(&c.lt_h) && (light_files() <= 0 || event(&c.lf_h));
             if (ok) {
                 std::vector<int> id((size_t) cap);
                 for (int i = 0; i < cap; ++i) id[(size_t) i] = i;
                 ok = cudaMemcpy(c.lt_ident, id.data(), id.size() * 4, cudaMemcpyHostToDevice) == cudaSuccess;
             }
             ok = cudaSetDevice(d.id) == cudaSuccess && ok;
+            if (!ok) cudaGetLastError();   // (the failed call's error is reported below, not by the next check)
+            c.lt_ready = ok;
             if (!ok) {
                 err = "DS4_PROMPT_LIGHT: its buffers (" +
                       std::to_string(((size_t) cap * D * 8 + (size_t) c.lf_slots_n * c.lf_stride) >> 20) +
@@ -7400,6 +7428,62 @@ struct Model::Impl {
         }
         return ok;
     }
+    // (Kestrel) the layer's light work ended on a way out that did not wait for it - an error after light_send: the
+    // files' job joined (its result dropped: the layer is failing already) and the helper's stream drained, so the
+    // next prompt's light_send cannot rewrite lt_hx / lt_hb / lf_stage under work still reading them
+    void light_drain(Chunk& c) {
+        if (c.lf_job.valid()) {
+            try {
+                (void) c.lf_job.get();
+            } catch (...) {
+            }
+        }
+        if (c.lt_st == nullptr) return;
+        int cur = 0;
+        if (cudaGetDevice(&cur) != cudaSuccess) cur = -1;
+        if (cudaSetDevice(helper_id) == cudaSuccess) (void) cudaStreamSynchronize(c.lt_st);
+        if (cur >= 0) (void) cudaSetDevice(cur);
+        (void) cudaGetLastError();
+    }
+    // (Kestrel, at teardown) a chunk's buffers outside Dev::allocs / host_allocs: the light experts' (light_send) -
+    // the files' job and the helper's stream ended first - and the busy EXL3 experts' (x3_fat_ready), each released
+    // on the device that owns it
+    void chunk_extra_free(Dev& d, Chunk& c) {
+        light_drain(c);
+        c.lf_readers.reset();
+        if (helper_id >= 0 && cudaSetDevice(helper_id) == cudaSuccess) {
+            if (c.lt_hh != nullptr) cudaFree(c.lt_hh);
+            if (c.lt_ident != nullptr) cudaFree(c.lt_ident);
+            if (c.lt_h != nullptr) cudaEventDestroy(c.lt_h);
+            if (c.lf_h != nullptr) cudaEventDestroy(c.lf_h);
+            if (c.lt_st != nullptr) cudaStreamDestroy(c.lt_st);
+        }
+        if (cudaSetDevice(d.id) == cudaSuccess) {
+            if (c.lt_dprow != nullptr) cudaFree(c.lt_dprow);
+            if (c.lt_dlidx != nullptr) cudaFree(c.lt_dlidx);
+            if (c.lt_g != nullptr) cudaEventDestroy(c.lt_g);
+            fat_free(c);
+        }
+        for (void* p : {(void*) c.lt_hx, (void*) c.lt_hy, (void*) c.lt_hb, (void*) c.lt_prow, (void*) c.lt_lidx,
+                        (void*) c.lf_stage})
+            if (p != nullptr) cudaFreeHost(p);
+        c.lt_hx = c.lt_hy = nullptr;
+        c.lt_hb = c.lt_prow = c.lt_lidx = c.lt_dprow = c.lt_dlidx = c.lt_ident = nullptr;
+        c.lt_hh = nullptr;
+        c.lf_stage = nullptr;
+        c.lt_st = nullptr;
+        c.lt_g = c.lt_h = c.lf_h = nullptr;
+        c.lt_lcap = 0;
+        c.lt_ready = false;
+        (void) cudaGetLastError();
+    }
+    struct LightGuard {   // (light_drain on every way out of the layer until disarmed)
+        Impl* m = nullptr;
+        Chunk* c = nullptr;
+        ~LightGuard() {
+            if (m != nullptr) m->light_drain(*c);
+        }
+    };
     // (the lead, at the layer's end) the files' light job joined and its kernels waited for: false on a failure (err)
     bool lf_join(Chunk& c, Streamer& S, std::string& err) {
         if (!c.lf_job.valid()) return true;
@@ -19505,7 +19589,10 @@ struct Model::Impl {
             }
         }
         const bool lt_sent = !lv.empty() && mi == 0;
+        LightGuard lt_guard;   // (Kestrel: armed from the send to the sums' add - see light_drain)
         if (lt_sent) {
+            lt_guard.m = this;
+            lt_guard.c = &c;
             const double ls0 = now_ms();
             if (!light_send(d, c, L0, lv, n_pool, b, T, err)) return false;
             S.light_send_ms += now_ms() - ls0;
@@ -19555,6 +19642,7 @@ struct Model::Impl {
                 return false;
             }
             light_add(c.acc, c.lt_hy, c.lt_dlidx, c.pos, c.rw, T, l.k_exp, D, s);
+            lt_guard.m = nullptr;   // (joined and waited for above)
         }
         if (xsum) moe_x_finish(c.acc, c.acc64, (size_t) T * D, s);
         if (nm > 1) chunk_allreduce(d, c, ab, mi, T * D, s);

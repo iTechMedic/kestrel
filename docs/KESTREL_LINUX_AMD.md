@@ -122,7 +122,8 @@ Stop Kestrel (Ctrl+C), open the config file the setup wrote and set its `"args"`
 
 The settings are written here under Kestrel's names (`KESTREL_...`). The setup and the dashboard write the same
 settings under the engine's own prefix (`MAYA_`, from upstream); either prefix works. Replace the setup's `"env"`
-with this one rather than adding to it: where a file has a setting under both prefixes, the `MAYA_` one counts.
+with this one rather than adding to it: where a file has a setting under both prefixes, the `MAYA_` one counts. When
+the setup or the dashboard later saves the file, it writes these settings back under `MAYA_`; they mean the same.
 
 ```json
 "args": ["--pack", "<the pack folder, as the setup wrote it>", "--max-context", "262144", "--tp", "1",
