@@ -150,10 +150,6 @@ To set it up on one GPU of a PC with several, name the card (`./kestrel.sh --che
 ./kestrel.sh --setup --backend hip --model inkling-2-mini --gpu 0
 ```
 
-If the engine build stops with `__ocml_` errors and the PC has two ROCm installs (for example your distribution's
-packages and one in `/opt/rocm-<version>`), run the setup with `ROCM_PATH` set to one of them, such as `ROCM_PATH=/usr`
-for the distribution's.
-
 ### Reading the speed numbers
 
 The prompt speed in the log and on the dashboard's Monitor counts **only the tokens read new**. The part of a

@@ -2956,6 +2956,17 @@ def toolchain_for(archs, nvcc_given: str | None, hc_given: str | None) -> tuple:
     return (nvccs[0] if nvccs else nvcc_given), hc_given
 
 
+def rocm_headers_shadowed(root: Path) -> list:
+    """Linux (Kestrel): the ROCm header folders in /usr/include - a distribution's ROCm packages - that would shadow
+    those of the ROCm at `root` in a HIP build. clang adds its ROCm's include folder after the system's (-idirafter)
+    and CMake drops it from the flags as implicit, so `#include <hipblaslt/hipblaslt.h>` took /usr/include's and mixed
+    two ROCm versions (__ocml_*_f32 undeclared). [] where nothing is shadowed."""
+    if WIN or root.resolve() == Path("/usr"):
+        return []
+    return [d for d in ("hip", "hipblas", "hipblaslt", "rocblas", "hsa")
+            if (Path("/usr/include") / d).is_dir() and (root / "include" / d).is_dir()]
+
+
 def hip_toolchain(pc: dict) -> tuple:
     """(ROCm root, its clang++, its bin folder, the build's environment) for a HIP build - the engine's and, on
     Windows, the vision encoder's (#345)."""
@@ -3036,6 +3047,11 @@ def compile_engine_hip(pc: dict, llama: Path, src: str, soft=False, target: str 
              f"-DSTRATA_GGML_DIR={llama.as_posix()}"]
     if not WIN and root == Path("/usr"):   # a distribution's ROCm: CMake's HIP check looks for hip-lang under this root
         conf.append(f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root.as_posix()}")
+    if not WIN:   # (Kestrel: two ROCm installs - this ROCm's headers before /usr/include's; empty: none shadowed)
+        shadowed = rocm_headers_shadowed(root)
+        conf.append("-DCMAKE_HIP_FLAGS=" + (f"-isystem {(root / 'include').as_posix()}" if shadowed else ""))
+        if shadowed:
+            ok(f"ROCm's headers from {root / 'include'}, ahead of another ROCm's in /usr/include ({', '.join(shadowed)})")
     jobs = max(1, min(4, (os.cpu_count() or 4) // 2))
     targets = [target] + [t for t in also if t != target]
     say("  Compiling Kestrel" + (" (" + ", ".join(targets) + ")" if len(targets) > 1 else "") + " for AMD " +
