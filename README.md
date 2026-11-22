@@ -2,8 +2,8 @@
 
 <h1 align="center">Kestrel</h1>
 
-<p align="center"><b>DeepSeek-V4.1-Flash-1017 (748 B), GLM-5.3 (744 B), GLM-5.3-Flash (321 B), MiniMax-M3.1-Flash (428 B) and
-Hy4-Flash (220 B) on your own GPUs</b><br>
+<p align="center"><b>DeepSeek-V4.1-Flash-1017 (748 B), GLM-5.3 (744 B), GLM-5.3-Flash (321 B), MiniMax-M3.1-Flash (428 B),
+Hy4-Flash (220 B) and Inkling-2-Mini (26 B) on your own GPUs</b><br>
 private and fast · NVIDIA and AMD · Linux and Windows · chat, pictures, OpenAI- and Anthropic-compatible API ·
 several requests at once</p>
 
@@ -62,11 +62,12 @@ bits the experts keep). The setup recommends one for your PC; to pick one yourse
 | **[MiniMax-M3.1-Flash](https://huggingface.co/MiniMaxAI/MiniMax-M3.1-Flash)**<br><sub>MiniMax · [MiniMax Community License](LICENSE.minimax-m31) · 428 B, 23 B active · up to 1M context</sub> | Maya-XS · `minimax-maya-xs` | 93 GB | the whole model in a 128 GB PC's memory |
 | | Maya-S · `minimax-maya-s` | 122 GB | closer to the original |
 | **[Hy4-Flash](https://huggingface.co/tencent/Hy4-flash)**<br><sub>Tencent · [Tencent Hy License](LICENSE.hy4-flash) · 220 B · up to 1M context · reads pictures · NVIDIA, AMD on Linux</sub> | Maya-XS · `hy4-flash-maya-xs`<br>Maya-S · `hy4-flash-maya-s`<br>Maya-M · `hy4-flash-maya-m`<br>Maya-L · `hy4-flash-maya-l` | 44.8 GB<br>53.0 GB<br>68.4 GB<br>89.5 GB<br>each + one 63.4 GB n-gram table | PCs with about 56-64 GB (Maya-XS; cards from 8 GB), 68-80 GB (Maya-S), 80-96 GB (Maya-M) or 104-128 GB (Maya-L) of RAM + VRAM; Maya-S, Maya-M and Maya-L on cards from 12 GB; the n-gram table stays on the SSD |
+| **[Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)** (new)<br><sub>thinkingmachines · Apache 2.0 · 26 B, 8 of 128 experts a token · up to 256K context · reads pictures · Linux · experimental preview</sub> | UD-Q4_K_XL (unsloth) · `inkling-2-mini` | 17.6 GB | one GPU: AMD RDNA 3 / 4 cards with 24 GB or more and Ryzen AI Max, the whole model in memory ([speed on an R9700](#inkling-2-mini-on-a-radeon-ai-pro-r9700)); NVIDIA from the V100 / RTX 20 on, from 8 GB (the experts that don't fit stay in RAM) |
 
 **Which model fits your PC?** See [docs/MEMORY.md](docs/MEMORY.md) for each model's recommended memory (VRAM + RAM together).
 
 All of them run on NVIDIA from the V100 / RTX 20 on, and on AMD and Windows (see
-[What you need](#what-you-need)); Hy4-Flash runs on NVIDIA (Linux and Windows) and on AMD on Linux (Strix Halo / Gorgon Halo, Radeon cards) and reads pictures on every card that runs it (8 GB cards included). DeepSeek's sizes include its Engram tables. The setup also offers unsloth's GGUF and
+[What you need](#what-you-need)); Hy4-Flash runs on NVIDIA (Linux and Windows) and on AMD on Linux (Strix Halo / Gorgon Halo, Radeon cards) and reads pictures on every card that runs it (8 GB cards included). Inkling-2-Mini runs on Linux only for now, on one GPU, one request at a time. DeepSeek's sizes include its Engram tables. The setup also offers unsloth's GGUF and
 turboderp's and LibertAIDAI's EXL3 quants of DeepSeek, orcarouter's abliterated DeepSeek, Mia-AiLab's EXL3 quant of MiniMax,
 turboderp's EXL3 quants of GLM, Qwen-3.8-Flash-Next (CYBER-FROST) as its Q5_K_M GGUF and Qwen-3.8-Flash-Next
 itself as unsloth's UD-IQ2_XS GGUF, both with pictures
@@ -124,6 +125,34 @@ Measured yours? `./kestrel.sh --bench`, then `./kestrel.sh --report`, and share 
 [GitHub issue](https://github.com/iTechMedic/kestrel/issues).
 
 A token is about ¾ of a word. The first answers after a start are the slowest while the caches fill with what you use.
+
+### Inkling-2-Mini on a Radeon AI PRO R9700
+
+Measured 2026-11-22 on the same PC, on the R9700 alone: the whole model and its FP8 cache fit in its 32 GB, so the
+8060S is not used. Model: unsloth's UD-Q4_K_XL, 262,144-token context. Fresh prompts, 800-token answers, greedy,
+thinking off.
+
+| Prompt length | Prompt read (tokens/s) | Decode (tokens/s) |
+|---:|---:|---:|
+| 2.7K | 1,104 | 83.1 |
+| 9.8K | 1,163 | 81.4 |
+| 37.5K | 906 | 74.5 |
+| 117K | 554 | 60.3 |
+| 228K | 358 | 47.6 |
+
+Short answers decode at about 89 tokens/s. Text, thinking, tool calls and pictures were checked, and the answers were
+the same over restarts. It is a far smaller model than the ones above: much faster on one card, not as strong on hard
+tasks.
+
+To set it up on one GPU of a PC with several, name the card (`./kestrel.sh --check` shows the numbers):
+
+```sh
+./kestrel.sh --setup --backend hip --model inkling-2-mini --gpu 0
+```
+
+If the engine build stops with `__ocml_` errors and the PC has two ROCm installs (for example your distribution's
+packages and one in `/opt/rocm-<version>`), run the setup with `ROCM_PATH` set to one of them, such as `ROCM_PATH=/usr`
+for the distribution's.
 
 ### Reading the speed numbers
 
@@ -205,7 +234,7 @@ long prompts at full depth, with most of the model read from RAM and the SSD.
 | --- | --- |
 | **GPU** | NVIDIA, compute capability 7.0 or newer (V100, RTX 20 and newer): one, or up to 16 that share the model. More VRAM is faster. Pascal (Tesla P40 / P100, GTX 10) is experimental, not validated yet. **AMD:** RX 7900 XT / XTX, Radeon AI PRO R9700 / RX 9070, Strix Halo and Gorgon Halo (Radeon 8060S / 8065S); RX 6800 / 6900 and Radeon PRO V620 / W6800 not validated yet; GLM-5.3-Flash and DeepSeek-V4.1-Flash-1017 read pictures there too - [the AMD guide](docs/AMD_MAYA.md) |
 | **RAM** | 32 GB runs it. More RAM keeps more experts close and is faster |
-| **Disk** | **A fast NVMe SSD** with room for the model (~75 GB for GLM-5.3-Flash · Maya-XS, ~100 GB for GLM-5.3-Flash · Maya-S, ~160 GB for GLM-5.3-Flash · Maya-L, ~350 GB for DeepSeek V4.1 · Maya-S, ~470 GB for unsloth's Q8 GGUF of it, ~95 GB for MiniMax M3.1 · Maya-XS, ~110 GB for Hy4-Flash · Maya-XS, ~200 GB for MiniMax-M3.1-Flash's EXL3 quant) and its picture encoder (1.1 GB). Not a hard disk |
+| **Disk** | **A fast NVMe SSD** with room for the model (~75 GB for GLM-5.3-Flash · Maya-XS, ~100 GB for GLM-5.3-Flash · Maya-S, ~160 GB for GLM-5.3-Flash · Maya-L, ~350 GB for DeepSeek V4.1 · Maya-S, ~470 GB for unsloth's Q8 GGUF of it, ~95 GB for MiniMax M3.1 · Maya-XS, ~110 GB for Hy4-Flash · Maya-XS, ~200 GB for MiniMax-M3.1-Flash's EXL3 quant, ~20 GB for Inkling-2-Mini) and its picture encoder (1.1 GB). Not a hard disk |
 | **System** | Linux (x86-64; a CPU with AVX2 is best), the NVIDIA driver, CUDA 12.x (CUDA 13 works for RTX 20 and newer, not for the V100 or Pascal), g++, Python 3.10+. Windows 10/11: [docs/WINDOWS.md](docs/WINDOWS.md). Not WSL2. AMD: ROCm 7 |
 
 The setup checks all of this, prints the exact command for anything missing, and installs nothing system-wide.

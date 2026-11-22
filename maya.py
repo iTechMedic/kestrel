@@ -11717,7 +11717,7 @@ def main() -> int:
         sys.stdout.flush()
         os.execve("/bin/sh", ["/bin/sh", str(HERE / "maya.sh"), *sys.argv[1:]], dict(os.environ, MAYA_SH="1"))
     version = maya_version()
-    say(f"Kestrel {kestrel_version()} (build {version}) - big models on one desktop: GLM-5.3-Flash, {DS4}, {MM3} or {HY4} on your own GPU(s).")
+    say(f"Kestrel {kestrel_version()} (build {version}) - big models on one desktop: GLM-5.3-Flash, {DS4}, {MM3}, {HY4} or {IK2_SHOWN} on your own GPU(s).")
     if a.report:
         return report(version, a.backend, a.config)
     if a.import_model:
