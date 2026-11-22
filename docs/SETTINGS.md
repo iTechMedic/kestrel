@@ -1632,7 +1632,9 @@ partial out to host-mapped memory and then reading the other's in, four bytes a 
 time. `MAYA_DS4_AR2=1` (the default on NVIDIA since v1.1.55: prompts +1.5% at 8K and +3% at 32K on 3x V100, `--tp 2`) does a prompt chunk's all-reduces in one launch that writes and reads in 128 KB pieces, the
 other member's rows read 16 bytes a lane: the same sums, bit for bit. `2` also sends both partials as FP16 (half the
 bytes; both members round theirs alike, so they stay equal, but the sums are FP16's, not exact).
-`MAYA_DS4_AR2_DECODE=1` takes the decode windows' all-reduces to the same kernel, exact. A group of three or more is
+`MAYA_DS4_AR2_DECODE=1` takes the decode windows' all-reduces to the same kernel, exact; `2` sends them as FP16 too, as
+`MAYA_DS4_AR2=2` does a prompt's (half the bytes of every decode step's two all-reduces a layer, where the rows go
+through host memory). A group of three or more is
 unchanged, except on the flow (`DS4_FLOW_TP=1`) with `MAYA_DS4_FLOW_AR_DMA=1`, which takes its prompt chunks' sums
 to the helper the batches off the flow already use (`MAYA_DS4_FLOW_AR_DMA` above). `ds4_gguf_test --ar <GPU> <GPU>` checks both
 against the host's sums on two GPUs and times them.
@@ -1640,7 +1642,7 @@ against the host's sums on two GPUs and times them.
 | Setting | Default | |
 | --- | --- | --- |
 | `MAYA_DS4_AR2` | `1` on NVIDIA, `0` on AMD | a group of two's prompt-chunk all-reduces: `1` pipelined in one launch, the same sums; `2` FP16 on the wire (half the bytes, the sums FP16's); `0`: as before v1.1.55 |
-| `MAYA_DS4_AR2_DECODE` | off (0) | `1`: a group of two's decode-window all-reduces in the same kernel, exact |
+| `MAYA_DS4_AR2_DECODE` | off (0) | `1`: a group of two's decode-window all-reduces in the same kernel, exact; `2`: FP16 on the wire (half the bytes, the sums FP16's - the answers can change) |
 | `DS4_AR_P2P` | off (0) | `1`: a group's all-reduce buffers in its first GPU's memory (above); `DS4_AR_P2P_LOG=1` names a group that stays host-mapped |
 | `--prefill-chunk` (DeepSeek, default) | auto: 4096 / 8192 | the prompt chunk a PC sets when the model loads, by the share of the experts on the CPU lane (estimated from the VRAM and the pack): under 40% 4096, 40% and above 8192 (the engine log prints `prompt chunk 8192 (about N% ...)`); a prompt streams every expert from RAM once a chunk, so where the RAM holds most of them the larger chunk reads long prompts up to ~19% faster. With 40% and above on the CPU lane and each layer on one GPU (several GPUs, one pipeline) the chunk is 16384 and the prompt path borrows the room of the expert cache's last slots for the length of a prompt instead of keeping its own buffers (one GPU always did): the experts' room grows by ~7-10% (the decode up to 2-4% faster) and prompts of 12K-30K tokens read 5-12% faster, 2 x V100 (Maya-XS, 8000 MiB reserve) 12K +10%, 20K +9%, 29K +12%, 1K-3K unchanged, 8K about -3% (the lent experts are read back after the prompt: 0.3 s). While the prompt runs, the lent experts' file ranges are read into the page cache by 4 threads so that the read-back is not the disk's (`DS4_LEND_PREFETCH=0` off; only where the RAM has four times their size to spare; Linux and Windows file cache). `DS4_BORROW=0` keeps the 8192 chunk and its own buffers. `--prefill-chunk N` sets it by hand |
 
@@ -2286,6 +2288,7 @@ Setup and debugging variables:
 | `MAYA_MM3_HOST_FREE` | `1` | decode: a layer whose routed experts are all in VRAM plans them on the GPU, so a token or a verify window runs without waiting for the host at each layer; `0`: the host plans every layer (the same tokens) |
 | `MAYA_MM3_PIPE` | `1` | `--parallel` on a layer split: the GPUs as a pipeline (each holds a different group of the running conversations, the same tokens); `0`: all of them through the GPUs together, one GPU at a time |
 | `MAYA_MM3_GRAPH` | `1` | decode on one GPU with every MoE layer host-free: a token's and a verify window's forward replayed as one graph (the same tokens); `0`: launched kernel by kernel |
+| `MAYA_MM3_HOST_STAGE` | `0` | several GPUs: `1` hands the activations between GPUs over through pinned host memory on every pair (by default a pair copies peer to peer only where the driver offers it, the IOMMU translates neither GPU and a test copy at load arrives intact; `MAYA_MM3_PEER=1` tries peer copies under a translating IOMMU too, still tested) |
 | `MAYA_MM3_WIN_SUBMIT` | `1` | Windows + AMD: each layer's queued work started as it is enqueued (the driver otherwise waits for the host); `0`: off |
 | `MAYA_MM3_ATTN_WIDE`, `MAYA_MM3_MSA_WIDE` | `1` | the sparse attention's decode kernel with more threads, the indexer's prompt scores in register tiles - each the same results as before; `0`: the earlier kernels |
 | `MAYA_MM3_LT_STORE` | the pack's `lt-picks.txt` | where hipBLASLt's measured kernels are kept |
@@ -2330,12 +2333,14 @@ On RDNA 3 / 3.5 (`gfx11`: RX 7000, Radeon 780M, Strix / Gorgon Halo's 8060S / 80
 default: the same exact products, summed in another order than the portable kernel, so the last bits differ and a
 long greedy answer can part from the other kernel's after a while; the quality is the same (a Gorgon Halo, DeepSeek EXL3
 2.25: KL to the full-precision model 0.1649 against 0.1661, the same top token 91.08% against 91.07%) and long
-prompts read faster (+3% at 8K, +6% at 32K, +10% at 64K; answers the same speed). RDNA 4 (`gfx12`) and other AMD
-cards keep the portable kernel. On NVIDIA it stays opt-in.
+prompts read faster (+3% at 8K, +6% at 32K, +10% at 64K; answers the same speed). RDNA 4 (`gfx12`: RX 9070, RX 9060)
+has its own kernel for its `_gfx12` WMMA, opt-in (`DS4_INDEX_TC_GFX12=1`; a 2 x RX 9060 XT reads an 8K prompt about
+5.5% faster); by default it keeps the portable kernel, as other AMD cards do. On NVIDIA it stays opt-in.
 
 | Setting | Default | |
 | --- | --- | --- |
-| `DS4_INDEX_TC` | on for AMD `gfx11`; off on NVIDIA | `0`: the portable kernel on AMD too (the log says so). `1` on NVIDIA (compute capability 8.0+): the tensor cores' kernel (int8 MMAs) |
+| `DS4_INDEX_TC` | on for AMD `gfx11` (RDNA 3 / 3.5); off on NVIDIA and other AMD cards | `0`: the portable kernel on AMD too (the log says so). `1` on NVIDIA (compute capability 8.0+): the tensor cores' kernel (int8 MMAs) |
+| `DS4_INDEX_TC_GFX12` | off | `1`: on RDNA 4 (`gfx12`) the indexer's scores on its WMMAs too (the last bits differ from the portable kernel, as on gfx11); `DS4_INDEX_TC=0` still turns every AMD card off |
 
 ## Qwen-3.8-Flash-Next (CYBER-FROST)
 
@@ -2402,6 +2407,7 @@ Engine options, in the config's `"args"`:
 
 | Variable | Default | What it does |
 |---|---|---|
+| `MAYA_CPU_SENSOR_ROOT` | unset (`/sys`) | an alternate CPU-temperature sensor tree, read before `/sys`; it may hold `class/hwmon` and `class/thermal`, or `hwmon` and `thermal` directly beneath it. Intended for a VM whose host exports or simulates CPU sensors; values read there are trusted. This does not change the AMD GPU's sysfs paths |
 | `MAYA_EXPERT_RAM_GB` | unset (what the RAM allows) | caps the experts' RAM tier, in GB (the dashboard's Models page: Experts in RAM) |
 | `MAYA_EXPERT_STAGERS` | Linux: the reads at once the model's drive serves fastest (2, 4, 8 or 16, measured in ~1 s at the first start on a drive and kept in `~/.config/project-maya/drive-reads.txt`; `MAYA_EXPERT_DRIVE_PROBE=0` skips the measurement); otherwise a quarter of the CPU threads, 2 to 8 | the threads that read a layer's experts from the file while the CPU prepares the layer (their reads overlap); `0`: read one by one when the CPU needs them |
 
@@ -2688,7 +2694,7 @@ Engine options, in the config's `"args"`:
 | `--tp` | `auto` | tensor parallel over this many GPUs of one kind; `auto`: the largest group of one kind when it holds the model and the context, else one GPU fewer (the one left out holds the head, the drafts and a helper's share of the experts), down to 2, else the layer split; `0`: the layer split |
 | `--main-gpu` | the fastest (measured) | the GPU for the output head and the MTP block, an index into `--gpus` |
 | `--layer-split` | `auto` | the layer split: the layers a GPU holds, comma-separated (`auto`: by each GPU's free VRAM) |
-| `--reserve-gb` | 0.75 | VRAM each GPU keeps free beyond the plan |
+| `--reserve-gb` | 0.75 | VRAM each GPU keeps free beyond the plan, in GB of 10^9 bytes (4 = 3815 MiB; 4.295 = 4096 MiB) |
 | `--chunk` | `auto` | prompt tokens a forward takes at most. `auto` (no `--chunk`): the engine's plan takes the largest of 4096, 2048 and 1024 at every start whose plan comes to what 1024's does - the same layout (tensor parallel stays tensor parallel), the same rows of the cache, pictures as large; where a larger chunk would cost one of these, the next smaller is taken (`INFO prompt chunk: N tokens`). Larger chunks read long prompts faster: a chunk has a fixed cost, and the experts that are not in VRAM are sent to the GPU once a chunk. What it costs: about 1.2 GB of VRAM for every 1024 tokens of chunk on each GPU that runs layers (about 3.5 GB more at 4096 than at 1024; with `--mtp` on tensor parallel as much again on the head's GPU for the block's own pass, where that fits - else the pass runs in line, said). On a PC whose routed experts do not all fit in VRAM that room holds fewer of them, so more are computed on the CPU while the model answers. `--chunk N` sets one by hand (the setup and the Models page keep it); a chunk given by hand that tensor parallel cannot hold falls to the layer split, as before. The chunk changes the prompt's rounding (as `--prefill N` does for GLM): the same chunk gives the same answers, another chunk can give another greedy answer |
 | `--vram-experts` | 1 (as many as fit) | the share of each layer's routed experts kept in VRAM, 0 to 1; the rest run on the CPU lane |
 | `--cpu-threads` | one a physical core but the first | the CPU lane's threads besides the calling one |
@@ -2754,6 +2760,16 @@ A request's `spec` (0 / 1) turns the drafts off or on for it.
 | `HY4_CREW_SPIN_MS` | 25 | tensor parallel: how long a member's host thread watches for the next token window before it sleeps, in ms |
 | `HY4_SUM_PER` | 2048 | tensor parallel: the fewest values of a sum a host thread takes (fewer threads join a smaller sum) |
 | `MAYA_IQ_MV8` | on | the quantized GEMV kernel's own form for windows of 5 to 8 tokens (the same sums); `0`: the 16-token form, as before |
+| `HY4_PREFETCH` | measured at the start | tensor parallel, a token window: a member reads the dense weights its next kernels take into the GPU's cache while its partial is out for the sum (the GEMVs then run from the cache, not at the memory's pace). At the start each member's cache is measured - ranges of 8, 16 and 24 MB read twice - and the read-ahead is on where the second pass took under 0.6 of the first (`INFO tensor parallel: a token window's dense weights read ahead ...`). `0`: off; a number: on without the measurement, its bits what is read ahead - 1 the FFN's router, down-projection and shared expert's gate and up, 2 its up-projection and the shared expert's down, 4 the next layer's `q_a`, `kv_a` and gate, 8 its other attention matrices. Reads only: the same results |
+| `HY4_PF_BLOCKS` | the GPU's SMs (8 to 64) | the read-ahead kernel's blocks |
+| `HY4_PF_ATTN_EARLY`, `HY4_PF_SMALL` | on | the read-ahead: the next layer's attention matrices from behind the routed experts' last kernel (`0`: from behind the FFN's partial), and the norms' and hyper-connections' small arrays before the matrices (`0`: the matrices alone) |
+| `HY4_PULL_BLOCKS`, `HY4_PUB_BLOCKS` | 3 | tensor parallel, a token window: the blocks of the kernel that reads a sum back, and of the one that sends a partial out |
+| `HY4_TP_SUM_STREAM` | on | tensor parallel, a token window: the host's summing threads add each member's part as its flag comes, in the members' order (the same additions as the sum of all parts once the last has come); `0`: that sum, as before |
+| `MAYA_IQ_MV_REG` | on | Q8_0 GEMVs of 2 to 8 columns over rows of up to 3072 values (CUDA): a lane keeps its sub-blocks' activations in registers and its warp takes a run of rows, where every row's warp read them again (the same sums in the same order); `0`: the row-a-warp kernel, as before |
+| `MAYA_IQ_MV_REG_MIN`, `MAYA_IQ_MV_REG_THREADS` | 2, 128 | that kernel: the columns it is taken from (a single column's GEMV waits on its weights, not its activations), and its block's threads (a multiple of 32 up to 256: its registers let an SM run few threads at once, and smaller blocks fit beside another kernel's) |
+| `HY4_Q8_FUSE`, `HY4_FFN_FORK`, `HY4_EG_EARLY`, `HY4_GEMV56`, `HY4_GEMV_AHEAD`, `HY4_GROUP_PAR2`, `HY4_RMS_AHEAD`, `MAYA_IQ_MV56`, `MAYA_IQ_NE56`, `MAYA_IQ_DN_RW4`, `MAYA_IQ_Q8_WIDE` | on | A/B switches of a token window's kernels and paths (`0`: the ones these replaced - the same results, slower): the kernels that write the next GEMV's int8 rows themselves, the FFN's two chains side by side, an Engram layer's lookup GEMV behind the layer before's FFN partial, the router's GEMV on 5 / 6 columns' own instances and with a lane's loads asked for a few steps at a time, the experts' grouping with four barriers, the norm kernel's loads asked for first, the quantized GEMVs' and the routed experts' 5 / 6-column instances, the down's 4 rows a warp on a member's slice, a Q8_0 block in 9 aligned loads |
+| `HY4_MTP_Q4K` | off | `1`: the MTP block's routed experts rounded to Q4_K at the start instead of Q8_0 (the type the model's own are) - a draft step reads half their bytes and the block is 1.8 GB smaller; the answers do not move (a draft is kept only where the model agrees). Off by default: the rounding takes some 17 s more of a start (512 experts) |
+| `HY4_LOGIT_HASH` | off | debugging: a hash of every window's rows of logits, bit by bit, printed at the end - two builds or settings that print the same hash made the same logits |
 | `HY4_TP_PROF` | off | debugging: the host's waits and sums a token window |
 | `HY4_TP_LATENT_SUM` | off | tensor parallel: the FFN's partials summed in the latent space, projected up after the sum (a third more to send) |
 | `HY4_TP_EV`, `HY4_TP_EV_M` | off | debugging: a member's GPU time by part of each layer (events), member 0 or the one named; `HY4_TP_EV=all`: every member's, by window size |
@@ -2772,6 +2788,59 @@ A request's `spec` (0 / 1) turns the drafts off or on for it.
 | `HY4_PROF` | off | debugging: each forward's GPU time by part |
 | `HY4_DUMP` | off | debugging: each layer's sums |
 | `HY4_INJECT`, `HY4_INJECT_FROM`, `HY4_SAVE` | off | debugging: a layer's inputs taken from a reference dump to compare one layer at a time |
+
+## Inkling-2-Small
+
+thinkingmachines' [Inkling-2-Small](https://huggingface.co/thinkingmachines/Inkling-2-Small) (594B, ~17B active) on
+its own engine, `maya-ik2` (`src/ik2`; CUDA on Linux, Volta on), from unsloth's GGUFs
+([unsloth/Inkling-2-Small-GGUF](https://huggingface.co/unsloth/Inkling-2-Small-GGUF): UD-Q4_K_XL, UD-Q3_K_XL) read in
+place. The routed experts sit in pinned host memory (~323 GiB for UD-Q4_K_XL, ~260 GiB for UD-Q3_K_XL) with a cache of
+them in VRAM; one request at a time, text only. `maya.py` does not set it up yet: docs/INKLING2.md section 6 has the
+tokenizer folder and the run config, then `python serve/server.py --engine maya --config ik2.json`.
+
+**Defaults**: temperature 1.0, top-p 1.0 (its card and files name none); the thinking level Auto, the template's own
+(0.9 - "high"). The template is thinkingmachines' (`tools/ik2/chat_template.jinja`), which takes every level by name:
+none, low (0.2), medium (0.7), high (0.9), xhigh and max (0.99); Off is none.
+
+Engine flags: `--max-context N` (262144), `--cache-gb N` (60: the expert cache's most, less if VRAM is short),
+`--gpus 1|2`, `--threads N` (8: the loading and the CPU lane), `--eos a,b`. Environment:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `IK2_KV` | `f16` | `fp8`: the KV cache in FP8 E4M3, half the bytes (the full layers' 32 KB a token -> 16 KB); against the reference it changed 5 of 48 top-1 tokens where FP16 changed none (docs/INKLING2.md 6.1) |
+| `IK2_WARM` | off | a profile of how often each expert is picked (written by `IK2_POP_OUT=FILE` over some prompts): the cache filled with the most picked at load, and the prompts' prefetch seeded with the counts. The first requests then do not start from an empty cache (a 600-token first request 7.0 -> 4.2 s on an H200) |
+| `IK2_UNSUPPORTED` | off | `1`: `maya-ik2` runs outside the Inkling 2 preview where it can run at all - the older two-GPU modes, AMD on Windows (untested). Off, the engine stops at the start with one line saying why (docs/INKLING2.md 8). A GPU older than sm_80 never runs it |
+| `IK2_EP` | off | `1` with `--gpus 2` (and `IK2_UNSUPPORTED=1`): expert parallel - each layer's experts dealt to both GPUs by how often they are picked, each GPU its own cache and link; attention and the KV cache on GPU 0. Decode 22 -> 42 tok/s on two RTX PRO 6000s. Off, `--gpus 2` is the two-GPU split (docs/INKLING2.md 8) |
+| `IK2_EP_SPLIT` | `0.55` | GPU 1's share of the picks under `IK2_EP` (GPU 0 also holds the dense weights and the cache of the KV) |
+| `IK2_TP` | off | `1` with `--gpus 2` (and `IK2_UNSUPPORTED=1`): the experts tensor parallel instead (each GPU half of every expert): decode 42.8 vs EP's 41.3 tok/s, prompts slower |
+| `IK2_CPU` | off | `1`: in decode, a missing NVFP4 expert computed on the CPU (AVX-512) when that is sooner than its copy over PCIe (H200 node, with `IK2_CPU_LAZY=0`: 34.5 -> 36.2 tok/s); one GPU only. `IK2_CPU_LAZY=0`: such an expert is not copied into the cache afterwards either (the link carries less) |
+| `IK2_OFF` | on where the experts do not all fit | the offload token path (one GPU): the resident path's launches (one CUDA graph a token) with a tier of the experts in VRAM - the cache's slots, sized per byte from `IK2_WARM`'s profile (the setup writes Maya's `data/expert-profile-ik2mini.bin` for an 8 - 16 GB card) - and every other pick copied by the GPU itself from pinned RAM into staging slots (`IK2_STAGE`, 2 x 8 a slot size); the same expert kernels on the same bytes, so the same answers as with every expert in VRAM. `0`: the cache path instead (a visit at a time); `1`: the offload path even where everything fits (tests). `IK2_ROOM_MB` (1024): the VRAM it leaves free beside the tier |
+| `IK2_LANE` | off | the offload path's lane parity: every expert (in VRAM, fetched, or on the CPU) in one exact arithmetic (`src/ik2/ik2_exact.h`: fixed-order FP32 sums, our own exp / tanh) so the CPU lane (AVX-512 or AVX2, NVFP4 and Q8_0, Hy4's lane threads) takes misses beside the GPU's fetch, split by measured costs; answers the same whichever side ran an expert, not bit-equal to the tensor-core experts. `fetch` / `cpu`: every miss to one side (tests); `IK2_LANE_THREADS` (timed at the start), `IK2_LANE_LOG=1`: lane jobs' times |
+| `IK2_VRAM_GB` | off | tests: GPU 0 as a card of N GiB (the rest of its memory held from the start); with `--gpus 2` both GPUs (`IK2_VRAM_GB1`: GPU 1's own) |
+| `IK2_TWO` | off | `--gpus 2`: `1` splits the experts across the two cards even where the first holds them all (by default it runs alone there - faster) |
+| `IK2_HOST_STAGE` | off | `--gpus 2`: `1` hands a token's rows between the cards through pinned host memory (by default peer to peer only where the driver offers it, the IOMMU translates neither card and a test copy at load arrives intact; `IK2_PEER=1` tries peer under a translating IOMMU too, still tested) |
+| `IK2_TWO_GRAPH` | off | `--gpus 2` with peer copies: `1` replays a token's launches on both cards as one CUDA graph (2x V100: 73.1 against 78.7 tok/s launched one by one) |
+| `IK2_ROOM1_MB` | `256` | `--gpus 2`: the VRAM the second card leaves free beside its experts |
+| `IK2_SUP` | 16384 (4096 when VRAM is short) | the tokens of one layer-major prompt pass (each pass copies every expert it misses once); a pass's scratch (~280 KB a token) comes out of the expert cache |
+| `IK2_PF_P` | `0.999` | the prompt prefetch: an expert is copied ahead when the chance that some token of the layer picks it is at least this |
+| `IK2_WGMMA` | on | `0`: the mma.sync attention on Hopper too (the wgmma one needs a build with sm_90a) |
+| `IK2_ALLOC` | mmap + register | `hostalloc`: the experts' host memory by `cudaHostAlloc`, which pins ~3 GiB/s (load 110-190 s instead of ~50-75 s) |
+| `IK2_HOST` | pinned; `mmap` when every expert stays in VRAM | `mmap`: the experts read through the page cache instead of pinned (for a host without the RAM: unusably slow from network storage, 0.34 tok/s). With every expert in VRAM they are copied there straight from the mapped files and no pinned copy is kept (Inkling-2-Mini loads in 3 s from the page cache) |
+| `IK2_FAST` | on when every expert fits in VRAM | the resident token path (docs/INKLING2.md 8): every expert in VRAM, a token's launches with nothing from the host between its embedding and its logits. `0`: tokens take the cache path |
+| `IK2_GRAPH` | on | `0`: the resident path's launches one by one instead of a CUDA graph a token (for profiling: nsys does not see inside a graph) |
+| `IK2_ATTN_MMA` | `1` | a token's attention on the tensor cores, a warp straight from the KV cache (65,536 tokens deep on an RTX 3090: 63 -> 77 tok/s with an FP16 cache, 53 -> 84 with FP8). `0`: the scalar kernels; `2`: the layers without a window only. A V100 (sm_70) takes its own kernel (`mma.m8n8k4`, 32 keys a warp step) |
+| `IK2_EXPERT_MMA`, `IK2_EXPERT_MMA_SPLIT`, `IK2_EXPERT_MMA_SPLIT_DOWN` | `1`, `8`, `4` | a token's NVFP4 experts on the tensor cores straight from their blocks (resident path): the gate / up input as two FP16 limbs in two columns, a code times its scale exact in FP16, FP32 sums. A group of 16 rows is a block of `SPLIT` warps, each a stride of the 64-value blocks (the weights in flight). One RTX 3090, Inkling-2-Mini: 121 -> 127 tok/s. `0`: the scalar kernels (also what Q8_0 experts take). A V100 (sm_70) takes its own kernel (`mma.m8n8k4`; the same rows and splits) |
+| `IK2_ARCH` | - | tests only: `70` or `75` runs an older GPU class's kernels on a newer GPU (Volta's everywhere; Turing's where the build has them, a `75-virtual` build) - docs/INKLING2.md section 6 |
+| `IK2_DRAFT_WIDTH` | `5` | `--draft` on Inkling-2-Mini's resident path: the widest window a step verifies (the anchor and its drafts, 2 .. 8) |
+| `IK2_DRAFT_ADAPT`, `IK2_DRAFT_PROBE`, `IK2_DRAFT_DECAY` | `1`, `8`, `0.85` | the controller: a window only when its expected tokens over its measured time beat a plain token's; after `PROBE` plain tokens one window to look at the acceptance again; `DECAY` how fast the acceptance is forgotten. `IK2_DRAFT_ADAPT=0`: always `IK2_DRAFT_WIDTH` wide |
+| `IK2_DRAFT_CTX` | the context | the positions the drafter's layer without a window sees (the last ones; its cache FP16, 4 KB a position): `65536` keeps 262144 resident on a 24 GB card |
+| `IK2_BLOCK`, `IK2_BLOCK_CHECK` | `1`, `0` | `0`: a verify window through forward() instead of the block path; `n`: the first n windows through both, their logits compared |
+| `IK2_RG_SLOTS` | 96 tokens' picks | with every expert in VRAM, a prompt of up to this many slots (tokens x picks) has its experts read by groups - an expert's blocks once for up to 8 of its tokens - instead of decoded to FP16 for a GEMM (a chat turn of 12 new tokens 118 -> 56 ms). `0`: never |
+| `IK2_CAND` | on | sampling takes the largest logits found on the device (a thousand and a few more) instead of the vocabulary's logits every token (100 -> 110 tok/s at temperature 1; the same tokens for the same seed). `0`: the logits |
+| `IK2_FLASH`, `IK2_MV`, `IK2_GROUP`, `IK2_OVERLAP`, `IK2_PREFETCH`, `IK2_SCAN`, `IK2_RELB`, `IK2_BORROW` | on | A/B switches (`0`): the paths these replaced - the attention through logits in memory, few tokens' experts through the GEMMs, no grouping, copies on the compute stream, no prefetch, plain LRU in prompt passes, no relative-bias table, no scratch lent from the cache for long prompts |
+| `IK2_DENSE` | FP16; `q8` when every expert stays in VRAM | `q8`: the dense weights kept as the GGUF's Q8_0 blocks (half an FP16 copy's bytes), a token's products straight over them, planar (`mv_q8p`); a prompt chunk decodes a matrix to FP16 for its GEMM. `f16`: the FP16 copy |
+| `IK2_PROF`, `IK2_STATS` | off | each request's time by phase; where its experts came from (cached, prefetched, copied on a miss, the CPU) |
+| `IK2_TRACE`, `IK2_POP_OUT`, `IK2_FORCE`, `IK2_LOGITS_OUT`, `IK2_MARGIN`, `IK2_VERIFY_CHECK`, `IK2_UP_MS`, `IK2_ALLOC_THREADS` | off | measurement: every layer's picks to a file; the pick counts (for `IK2_WARM`); fixed tokens fed (`--tokens` runs: two builds compared on the same text, and how often each one's pick agrees); every generated token's logits to a file (with `IK2_FORCE`: two builds' logits over the same tokens); the drafter's checks (`--draft`); the CPU lane's estimate of an expert's copy time; threads allocating host memory |
 
 ## GLM-5.3 (744B)
 
