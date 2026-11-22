@@ -1,0 +1,6 @@
+# Aider model settings for Kestrel serving DeepSeek-V4.1-Flash: let Kestrel use the model's own sampling
+# (temperature 1.0, top_p 1.0) instead of aider's temperature 0.
+- name: openai/deepseek-v4.1-flash
+  edit_format: diff
+  use_temperature: false
+  use_repo_map: false

@@ -1,0 +1,38 @@
+diff --git a/aider/models.py b/aider/models.py
+index a6f4559d5..fa92583ca 100644
+--- a/aider/models.py
++++ b/aider/models.py
+@@ -25,7 +25,7 @@ from aider.utils import check_pip_install_extra
+ 
+ RETRY_TIMEOUT = 60
+ 
+-request_timeout = 600
++request_timeout = 3600   # Kestrel: a 32K-token think at ~55 tok/s takes ~10 min before the answer
+ 
+ DEFAULT_MODEL_NAME = "gpt-4o"
+ ANTHROPIC_BETA_HEADER = "prompt-caching-2024-07-31,pdfs-2024-09-25"
+diff --git a/benchmark/Dockerfile b/benchmark/Dockerfile
+index a5926dab7..54f91280f 100644
+--- a/benchmark/Dockerfile
++++ b/benchmark/Dockerfile
+@@ -47,7 +47,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+     cd /npm-install && \
+     npm init -y && \
+     npm install \
+-    jest \
++    jest@29.7.0 \
+     @babel/core@7.25.2 \
+     @exercism/babel-preset-javascript@0.2.1 \
+     @exercism/eslint-config-javascript@0.6.0 \
+diff --git a/benchmark/docker.sh b/benchmark/docker.sh
+index 6f97b865e..7f7a2df56 100755
+--- a/benchmark/docker.sh
++++ b/benchmark/docker.sh
+@@ -8,6 +8,7 @@ docker run \
+        -v `pwd`:/aider \
+        -v `pwd`/tmp.benchmarks/.:/benchmarks \
+        -e OPENAI_API_KEY=$OPENAI_API_KEY \
++       -e OPENAI_API_BASE=$OPENAI_API_BASE \
+        -e HISTFILE=/aider/.bash_history \
+        -e PROMPT_COMMAND='history -a' \
+        -e HISTCONTROL=ignoredups \
