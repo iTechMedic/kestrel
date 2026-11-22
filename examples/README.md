@@ -48,8 +48,11 @@ change `"host"`.
    example has `/opt/rocm/lib`, but ROCm can also be in `/opt/rocm-<version>/lib`, or under `/usr` from your
    distribution's packages.
 
-4. **Match your GPUs.** `"gpu": [0, 1]` means GPU 0 runs the model's layers and GPU 1 is the helper with the 100 GB
-   expert pool. Check the numbers with `rocm-smi`. If your helper GPU has less memory to share, lower
+4. **Match your GPUs.** `"gpu"` lists HIP's GPU numbers: the first runs the model's layers (the R9700), the second is
+   the helper with the 100 GB expert pool (the 8060S). `./kestrel.sh --check` shows HIP's numbers. **Don't go by
+   `rocm-smi`:** it numbers the GPUs its own way, and on some PCs the two orders are reversed. Where HIP numbers the
+   8060S as GPU 0, the line is `"gpu": [1, 0]`, and the setup in step 1 takes `--gpus 1,0`. The setup must name both
+   GPUs, so that the engine is built for both. If your helper GPU has less memory to share, lower
    `KESTREL_DS4_HELPER_GB`. If your PC has less RAM than the reference PC's 128 GB, lower `KESTREL_DS4_WARM_CAP_GB`.
 
 5. **Choose who can connect.** As shipped, only this PC can reach Kestrel (`"host": "127.0.0.1"`). To serve other

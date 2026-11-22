@@ -157,7 +157,8 @@ What each one does (more in [SETTINGS.md](SETTINGS.md)):
 
 | Setting | What it does |
 | --- | --- |
-| `KESTREL_DS4_HELPER=1`, `KESTREL_DS4_HELPER_GB=100` | visible GPU 1 (the 8060S) is the helper, with a 100 GB pool of the most-routed experts |
+| `"gpu": [0, 1]` | HIP's GPU numbers, the R9700 first and the 8060S second. `./kestrel.sh --check` shows them; `rocm-smi` numbers the GPUs its own way and can show them reversed. Where HIP numbers the 8060S as GPU 0, write `[1, 0]` (and set up with `--gpus 1,0`) |
+| `KESTREL_DS4_HELPER=1`, `KESTREL_DS4_HELPER_GB=100` | the second GPU in `"gpu"` (visible GPU 1, the 8060S) is the helper, with a 100 GB pool of the most-routed experts |
 | `KESTREL_DS4_HELPER_EXL3=1` | the helper keeps and computes EXL3 experts itself |
 | `KESTREL_DS4_FLOW_HELPER=1` | in a prompt, an expert the helper holds is copied from its pool instead of read from the SSD |
 | `KESTREL_DS4_WARM_CAP_GB=14` | 14 GB of experts in host RAM beside the helper's pool |
