@@ -89,6 +89,7 @@ import calibrate_glm as CAL  # noqa: E402  the CPU lane's tuning for this PC (./
 import calibrate_ds4_tp as CAL4  # noqa: E402  DeepSeek's: --tp and the CPU threads (./kestrel.sh --calibrate)
 import calibrate_draft as CD  # noqa: E402  the speed calibration: DFlash2 or the MTP block on this PC
 import calibrate_ds4 as CDS  # noqa: E402  DeepSeek's: the DSpark drafter or none, on this PC
+import maya_bench as MB  # noqa: E402  --bench: the speed-test standard (one session a round, A/B, the result line)
 import calibrate_mm3_prefill as CPF  # noqa: E402  MiniMax's: how this PC reads prompts fastest (chunk, GEMMs)
 from serve import glm_dsa_product as G53  # noqa: E402  GLM-5.3 (744B, glm-dsa)
 from serve import glm_link as GL  # noqa: E402  GLM on an AMD APU + an NVIDIA card ("mixed_gpus")
@@ -869,10 +870,11 @@ HY4_CHUNK_UP_GIB = 0.95
 # Inkling-2-Mini (an EXPERIMENTAL PREVIEW, PR #1095): thinkingmachines' looped 26B on its own engine maya-ik2 (src/ik2,
 # docs/INKLING2.md section 8) - NVIDIA only, Linux only, V100 / RTX 20 and newer with 8 GB or more (the engine's
 # kernels per architecture: Volta's mma.m8n8k4, Turing's and Ampere's mma.sync); the experts the card does not hold
-# stay in RAM (about 13 GB of RAM with an 8 GB card; tools/ik2_fit.py); AMD: RDNA 3 / 3.5 / 4 or a Halo / APU with 24 GB.
+# stay in RAM (about 13 GB of RAM with an 8 GB card; tools/ik2_fit.py); AMD: RDNA 3 / 3.5 / 4 from 12 GB (the same
+# offload path under 24 GB) or a Halo / APU with 24 GB.
 # Its file: unsloth's UD-Q4_K_XL (Unsloth's looped layout, which the engine reads) - tools/ik2/download.json, pinned
-# by size and sha256; the setup offers no drafter (the engine's --draft is by hand, docs/INKLING2.md).  Pictures: the
-# model's vision tower as unsloth's mmproj-BF16.gguf (download.json's "vision", beside the GGUF; not with --no-vision),
+# by size and sha256; its drafter from Maya's own repo (download.json's "drafter", ik2_drafter_step).  Pictures: the
+# model's vision tower as the mmproj-Inkling-2-Mini-BF16.gguf (download.json's "vision", beside the GGUF; not with --no-vision),
 # read by maya-vision (tools/vision/inkling2v_patch.py) only while a request's pictures are encoded - on the GPU where
 # its free VRAM holds the encoder, else on the CPU; never kept in VRAM, and the context's fit is the same.  What fits on
 # the card (the context): tools/ik2_fit.py, shared with the Models page.  Its defaults: maya_quants.MODEL_DEFAULTS
@@ -2143,7 +2145,7 @@ def choose_family(a, prev: dict) -> str:
                       "and newer, Linux." if q4 else "")))
     else:
         keys = tuple(k for k in keys if k != "hy4")
-    # Inkling-2-Mini, after it: an experimental preview (PR #1095) - Linux, one NVIDIA GPU of 8 GB or more or an AMD one of 24 GB
+    # Inkling-2-Mini, after it: an experimental preview (PR #1095) - Linux, one NVIDIA GPU of 8 GB or more or an AMD one of 12 GB
     rows.append((f"{IK2_SHOWN} (experimental)", None, ik2_about()))
     was53 = default == "glm" and bool(prev) and G53.config_is_glm_dsa(prev)
     pick = keys[choose("Model?", ["Which model to set up:"], rows, keys.index("glm53" if was53 else default), a.yes)]
@@ -2807,9 +2809,9 @@ def compile_engine(archs, gpu_ids, nvcc, host_compiler, llama: Path, src: str, s
         conf += ["-G", "Ninja", f"-DCMAKE_MAKE_PROGRAM={ninja}"]
     cuda_archs = arch_setting(archs)
     conf += ["-S", str(ROOT), "-B", str(BUILD), "-DCMAKE_BUILD_TYPE=Release",
-             "-DSTRATA_ENABLE_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={cuda_archs}",
-             "-DSTRATA_NATIVE_EXPERTS=ON", "-DSTRATA_BUILD_TESTS=OFF",
-             f"-DCMAKE_CUDA_COMPILER={nvcc}", *toolkit_root_defs(nvcc), f"-DSTRATA_GGML_DIR={llama}"]
+             "-DMAYA_ENABLE_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={cuda_archs}",
+             "-DMAYA_NATIVE_EXPERTS=ON", "-DMAYA_BUILD_TESTS=OFF",
+             f"-DCMAKE_CUDA_COMPILER={nvcc}", *toolkit_root_defs(nvcc), f"-DMAYA_GGML_DIR={llama}"]
     if S.ARM and S.arm_cpu_arch():
         conf.append(f"-DGGML_CPU_ARM_ARCH={S.arm_cpu_arch()}")
     if host_compiler:
@@ -3036,15 +3038,15 @@ def compile_engine_hip(pc: dict, llama: Path, src: str, soft=False, target: str 
         conf += ["-G", "Ninja", f"-DCMAKE_MAKE_PROGRAM={Path(ninja).as_posix()}",
                  f"-DCMAKE_C_COMPILER={(clang.parent / 'clang.exe').as_posix()}",
                  f"-DCMAKE_CXX_COMPILER={clang.as_posix()}", f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root.as_posix()}",
-                 "-DSTRATA_PORTABLE=ON"]
+                 "-DMAYA_PORTABLE=ON"]
         if " " not in str(root) + str(bitcode):        # (with a space in them, clang takes HIP_PATH and the above)
             conf.append(f"-DCMAKE_HIP_FLAGS=--rocm-path={root.as_posix()} --rocm-device-lib-path={bitcode.as_posix()}")
     conf += ["-S", str(ROOT), "-B", str(BUILD), "-DCMAKE_BUILD_TYPE=Release",
-             "-DSTRATA_ENABLE_HIP=ON", "-DSTRATA_ENABLE_CUDA=OFF", "-DSTRATA_PREFILL_MMQ=ON",
-             "-DSTRATA_NATIVE_EXPERTS=ON", "-DSTRATA_BUILD_TESTS=OFF",
+             "-DMAYA_ENABLE_HIP=ON", "-DMAYA_ENABLE_CUDA=OFF", "-DMAYA_PREFILL_MMQ=ON",
+             "-DMAYA_NATIVE_EXPERTS=ON", "-DMAYA_BUILD_TESTS=OFF",
              f"-DCMAKE_HIP_ARCHITECTURES={';'.join(pc['archs'])}",
              f"-DCMAKE_HIP_COMPILER={clang.as_posix()}", f"-DCMAKE_PREFIX_PATH={root.as_posix()}",
-             f"-DSTRATA_GGML_DIR={llama.as_posix()}"]
+             f"-DMAYA_GGML_DIR={llama.as_posix()}"]
     if not WIN and root == Path("/usr"):   # a distribution's ROCm: CMake's HIP check looks for hip-lang under this root
         conf.append(f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root.as_posix()}")
     if not WIN:   # (Kestrel: two ROCm installs - this ROCm's headers before /usr/include's; empty: none shadowed)
@@ -4445,8 +4447,8 @@ def compile_vision(pc, meta, llama: Path, src: str) -> bool:
     hip = pc.get("backend") == "hip"
     env = vcvars = bindir = None
     if hip:
-        conf += ["-DSTRATA_VISION_HIP=ON",
-                 "-DSTRATA_VISION_HIP_TARGETS=" + ";".join(str(x) for x in archs),
+        conf += ["-DMAYA_VISION_HIP=ON",
+                 "-DMAYA_VISION_HIP_TARGETS=" + ";".join(str(x) for x in archs),
                  "-DAMDGPU_TARGETS=" + ";".join(str(x) for x in archs),
                  "-DCMAKE_HIP_ARCHITECTURES=" + ";".join(str(x) for x in archs)]
         if WIN:
@@ -4461,7 +4463,7 @@ def compile_vision(pc, meta, llama: Path, src: str) -> bool:
         if S.ARM and S.arm_cpu_arch():
             conf.append(f"-DGGML_CPU_ARM_ARCH={S.arm_cpu_arch()}")
     elif not metal:                                    # (macOS: ggml builds its Metal backend by default, no CUDA)
-        conf += ["-DSTRATA_VISION_CUDA=ON",
+        conf += ["-DMAYA_VISION_CUDA=ON",
                  "-DCMAKE_CUDA_ARCHITECTURES=" + ";".join(str(x) for x in archs),
                  f"-DCMAKE_CUDA_COMPILER={meta.get('nvcc') or pc['nvcc']}",
                  *toolkit_root_defs(meta.get('nvcc') or pc['nvcc'])]
@@ -5491,12 +5493,17 @@ def route_forget() -> None:
 def hot_forget(cfg: dict) -> None:
     """--speed-calibration: maya-hy4's HY4_HOT scores for this config's model (data/hy4-expert-hot-<model>.bin: which
     experts a start places in VRAM, kept as they are between calibrations so that every start begins the same) are
-    dropped - the next run learns them again from its answers (the CPU lane check's run below, else the next start)."""
+    dropped - the next run learns them again from its answers (the CPU lane check's run below, else the next start).
+    Where Maya ships scores for the model (data/hy4-hot-seed) the file is left empty instead: the engine reads the
+    shipped scores only where there is no file."""
     sys.path.insert(0, str(ROOT))
     import serve.server as SV
     path = ROOT / "data" / SV.hy4_hot_file(cfg).name
     try:
-        path.unlink()
+        if SV.hy4_hot_seed(cfg) is not None:
+            path.write_bytes(b"")        # (this PC's own, none learned yet: the shipped scores are not read)
+        else:
+            path.unlink()
         ok("the experts a start places in VRAM (HY4_HOT's scores) are learned again from the next answers")
     except FileNotFoundError:
         pass
@@ -5647,6 +5654,8 @@ def needs_speed_calibration(cfg: dict) -> bool:
         return CDS.has_drafter(cfg) and "speed_calibration" not in (cfg.get("installer") or {}) and             not (config_family(cfg) == "minimax" and parallel_of(cfg) > 1)   # (maya-mm3 --parallel: no drafting)
     if g53_one_gpu_drafting(cfg):                      # (GLM-5.3 on one APU: drafting on or off, measured once)
         return "speed_calibration" not in (cfg.get("installer") or {})
+    if glm_draft_length_wanted(cfg):                   # (GLM on NVIDIA: the one draft length of this PC, measured once)
+        return True
     return "--dflash" in args[:-1] and parallel_of(cfg) <= 1 and \
         "speed_calibration" not in (cfg.get("installer") or {})
 
@@ -5707,6 +5716,8 @@ def speed_calibration(cfg_path: Path, why: str = "") -> bool:
         return speed_calibration_ds4(cfg_path, cfg, why)
     if g53_one_gpu_drafting(cfg):
         return speed_calibration_g53(cfg_path, cfg, why)
+    if glm_draft_length_candidate(cfg):
+        return speed_calibration_glm_length(cfg_path, cfg, why)
     drafter = drafter_file(cfg)
     if drafter is None or not drafter.is_file():
         warn("the speed calibration compares the DFlash2 drafter with the MTP block, and the drafter is not on this "
@@ -5895,6 +5906,96 @@ def speed_calibration_g53(cfg_path: Path, cfg: dict, why: str = "") -> bool:
        ("drafts with the MTP block on this GPU" if keep else "decodes without drafting") +
        (" (a tie: the default for this PC)" if abs(d - o) <= G53_DRAFT_TIE * max(o, d) else ""))
     say(f"       (saved in {cfg_path.name}; {ME} --speed-calibration measures again)")
+    return True
+
+
+GLM_DRAFT_LENGTHS = (2, 3, 4)   # GLM on NVIDIA, same answers (MAYA_GLM_SAME_ANSWERS, default): the lengths measured
+GLM_LENGTH_TIE = 0.03           # a longer length is kept only when it decodes faster by more than this (2 otherwise)
+GLM_LENGTH_PROBE = {"mixed": True, "tokens": 512, "answer": 128, "warm": 32}
+
+
+def glm_draft_length_candidate(cfg: dict) -> bool:
+    """A GLM config on NVIDIA GPUs that drafts with its MTP block and keeps the same greedy answers on every start
+    (MAYA_GLM_SAME_ANSWERS on, the default): the engine then drafts one fixed length, and which length is fastest
+    depends on the PC - measured once (installer.glm_draft_length) and kept as MAYA_GLM_MTP_FIXED."""
+    if config_family(cfg) != "glm" or cfg.get("backend") != "cuda" or parallel_of(cfg) > 1:
+        return False
+    if "--dflash" in (cfg.get("args") or [])[:-1] or cfg.get("mixed_gpus") is True:
+        return False
+    env = cfg.get("env") or {}
+    return str(env.get("MAYA_GLM_SAME_ANSWERS", "1")) != "0" and "MAYA_GLM_MTP_ADAPT" not in env
+
+
+def glm_draft_length_wanted(cfg: dict) -> bool:
+    """... and not measured yet (and not set by hand: a MAYA_GLM_MTP_FIXED the user wrote stays theirs)."""
+    inst = cfg.get("installer") or {}
+    return glm_draft_length_candidate(cfg) and "glm_draft_length" not in inst and \
+        "MAYA_GLM_MTP_FIXED" not in (cfg.get("env") or {})
+
+
+def glm_length_pick(speeds: dict) -> int:
+    """The fastest measured draft length; the shorter one unless a longer is faster by more than GLM_LENGTH_TIE."""
+    best = min(speeds)
+    for n in sorted(speeds):
+        if speeds[n] > speeds[best] * (1.0 + GLM_LENGTH_TIE):
+            best = n
+    return best
+
+
+def speed_calibration_glm_length(cfg_path: Path, cfg: dict, why: str = "") -> bool:
+    """GLM on NVIDIA GPUs: the model loaded once for each draft length (GLM_DRAFT_LENGTHS), each writing the same short
+    answers as greedy (decode speed, as --bench measures it); the fastest is kept as MAYA_GLM_MTP_FIXED, so every start
+    of this PC drafts the same length and gives the same answers.  False: not measured."""
+    if busy_skip(cfg, why == "asked for", "the speed calibration", "the GPU(s)",
+                 f" (a model server still running?) - it runs at the next start, or: {ME} --speed-calibration"):
+        return False
+    say()
+    say("  Speed calibration: how many tokens the MTP block drafts at a time on this PC" + (f" ({why})" if why else ""))
+    say("  The same length is then used on every start, so the same question gets the same answer each time.")
+    say(f"  Kestrel loads the model {len(GLM_DRAFT_LENGTHS)} times (lengths {', '.join(map(str, GLM_DRAFT_LENGTHS))}); "
+        f"each time it writes about {GLM_LENGTH_PROBE['tokens']} tokens of short answers.  The PC is busy meanwhile.")
+    log = cfg.get("log")
+    since = os.path.getsize(log) if log and os.path.isfile(log) else 0
+    speeds: dict[int, float] = {}
+    try:
+        import tempfile
+        from serve.server import StrataEngine, child_env, engine_args
+
+        def start_engine(c):
+            return StrataEngine(c["exe"], engine_args(c), cwd=c.get("cwd"), log=c.get("log"), env=child_env(c))
+        warm, questions, n_doc = CD.requests(cfg, mixed=True)
+        with tempfile.TemporaryDirectory(prefix="maya-speed-") as tmp:
+            for i, n in enumerate(GLM_DRAFT_LENGTHS):
+                c = json.loads(json.dumps(cfg))
+                c["sampling"] = {"temperature": 0.0}
+                c["args"] = CAL.without_writes(list(c.get("args") or []))
+                c["env"] = {**(c.get("env") or {}), **CAL.usage_copy(cfg, Path(tmp)), "MAYA_GLM_SLOTS": "0",
+                            "MAYA_GLM_MTP_FIXED": str(n)}
+                r = CD.measure(c, f"draft length {n}", warm, questions, n_doc, start_engine, say,
+                               f"[{i + 1}/{len(GLM_DRAFT_LENGTHS)}] ", GLM_LENGTH_PROBE)
+                if r["tokens"] < GLM_LENGTH_PROBE["tokens"] // 2:
+                    raise RuntimeError(f"length {n} wrote only {r['tokens']} tokens: too few for a sustained speed")
+                speeds[n] = r["tok_s"]
+    except Exception as e:                             # never stops a setup or a start: the config stays as it was
+        warn(f"the speed calibration did not finish ({e}): nothing changed - Kestrel keeps the engine's own start length; "
+             f"{ME} --speed-calibration tries again")
+        why_not = CAL.engine_error(log, since)
+        if why_not:
+            say(f"       the engine said: {why_not}")
+        cfg.setdefault("installer", {})["glm_draft_length"] = {"date": time.strftime("%Y-%m-%d %H:%M"),
+                                                                "failed": str(e)[:300]}
+        cfg_path.write_text(json.dumps(N.env_out(cfg), indent=1), encoding="utf-8")
+        return False
+    n = glm_length_pick(speeds)
+    cfg.setdefault("env", {})["MAYA_GLM_MTP_FIXED"] = str(n)
+    cfg.setdefault("installer", {})["glm_draft_length"] = {
+        "date": time.strftime("%Y-%m-%d %H:%M"), "version": maya_version(), "n": n,
+        "tok_s": {str(k): v for k, v in speeds.items()}}
+    cfg_path.write_text(json.dumps(N.env_out(cfg), indent=1), encoding="utf-8")
+    say()
+    ok("speed calibration: draft length " + ", ".join(f"{k}: {v:.1f} tokens/s" for k, v in sorted(speeds.items())) +
+       f" - Kestrel drafts {n} at a time on this PC")
+    say(f"       (saved in {cfg_path.name} as MAYA_GLM_MTP_FIXED; {ME} --speed-calibration measures again)")
     return True
 
 
@@ -6856,8 +6957,6 @@ def bench_exe(cfg: dict) -> Path:
                            "ik2": "maya-ik2"}.get(config_family(cfg), "maya"))
 
 
-BENCH_MIN_ANSWER = 64   # an answer shorter than this (the model stopped early) is listed, not in the decode mean (#549)
-
 
 def bench_chat(family: str, tokenizer_dir: Path):
     """--bench's prompt for a question, in the model family's own chat format, thinking off: GLM's markers, DeepSeek's
@@ -6888,37 +6987,38 @@ def bench_chat(family: str, tokenizer_dir: Path):
     return "[gMASK]<sop><|user|>\n{}<|assistant|>\n</think>".format
 
 
-def bench_gen_line(n_new: int, ids, multi: bool) -> str:
-    """The GEN line --bench sends: an engine that runs several conversations (READY ... multi=<n>, a --parallel config)
-    takes a request only with its id (#420, #509: 'GEN needs rid=<id>')."""
-    return f"GEN {n_new} temperature=0{' rid=0' if multi else ''} " + ",".join(map(str, ids)) + "\n"
+bench_gen_line = MB.gen_line      # (the GEN line and the DONE / ERR reply: tools/maya_bench.py, tested there)
+bench_reply = MB.reply_fields
 
 
-def bench_reply(line: str, multi: bool):
-    """A DONE / ERR line's fields as a one-conversation engine writes them (several conversations: DONE <rid> ...,
-    the id dropped); None for another request's line or one that is neither."""
-    f = line.split()
-    if not f or f[0] not in ("DONE", "ERR"):
-        return None
-    if multi and len(f) > 1 and f[1].isdigit():
-        if f[1] != "0":
-            return None
-        f = f[:1] + f[2:]
-    return f
+def bench_model_name(cfg: dict) -> str:
+    """The model + size a result line names: the config's model and its quant (the pack's or file's folder name when
+    the config has no installer record)."""
+    q = (cfg.get("installer") or {}).get("quant")
+    if not q:
+        a = [str(x) for x in cfg.get("args") or []]
+        for k in ("--glm-pack", "--pack", "--model"):
+            if k in a[:-1]:
+                p = Path(a[a.index(k) + 1])
+                q = (p.parent.name if p.name in ("pack", "maya-hy4", "maya-ik2") or p.suffix == ".gguf" else p.name)
+                break
+    return f"{cfg.get('model_name') or config_family(cfg)} {q or '?'}".strip()
 
 
-def bench_decode_mean(results) -> tuple[float, int]:
-    """The decode mean of --bench's answers and how many it covers: the answers of BENCH_MIN_ANSWER tokens or more (a
-    short one - an answer the model ended early - says little about the speed, #549); all of them when none is."""
-    dec = [r for r in results if r[0] == "decode"]
-    full = [r for r in dec if r[3] >= BENCH_MIN_ANSWER] or dec
-    return (sum(r[2] for r in full) / len(full) if full else 0.0), len(full)
+def bench_config_text(cfg: dict, ctx: int, drafting: str) -> str:
+    """The config part of a result line: context, the KV cache's format where the config sets one, drafting."""
+    a = [str(x) for x in cfg.get("args") or []]
+    kv = next((a[a.index(k) + 1] for k in ("--kv", "--kv-cache", "--kv-type", "--cache-type") if k in a[:-1]), None)
+    kv = kv or next((str(v) for k, v in (cfg.get("env") or {}).items() if k.endswith("_KV")), None)
+    return " ".join(x for x in (f"{ctx // 1024}K", f"KV {kv}" if kv else "", drafting) if x)
 
 
-def bench(cfg_path: Path, version: str) -> int:
-    """--bench: a standard speed test of the installed model on this PC - decode (writing an answer) on three
-    questions and prefill (reading a prompt) at 2k and 8k tokens of this folder's docs - through the engine alone, the
-    way the dashboard starts it.  Writes maya-bench.txt (--report includes it).  A few minutes."""
+def bench(cfg_path: Path, version: str, compare: str | None = None, rounds: int = 2, wait_min: float = 10.0) -> int:
+    """--bench: the speed-test standard (tools/maya_bench.py) on the installed model - a quiet-machine check, one engine
+    session with a warm-up answer, 3 answers of 256 tokens and the 2K / 8K prompts 3 times each; medians with min-max,
+    what drafting chose, the wall time of each phase and one result line (maya-bench-results.txt).  --compare: the same
+    on this build and another, alternated, exactness first.  Writes maya-bench.txt (--report includes it)."""
+    import socket
     import urllib.request
     cfg = read_json(cfg_path)
     select_build_backend(cfg.get("backend", "cuda"))
@@ -6939,92 +7039,143 @@ def bench(cfg_path: Path, version: str) -> int:
     tp = Path(cfg.get("tokenizer") or (pack / "tokenizer" if pack else ""))
     if not (tp / "vocab.json").exists():
         fail(f"{cfg_path.name}: the tokenizer is missing ({tp})", f"run {ME} --setup to repair it")
-    tok = ST.Tokenizer.from_dir(tp)
-    ctx = int(args[args.index("--max-context") + 1]) if "--max-context" in args[:-1] else 32768
-    text = "\n\n".join(p.read_text(encoding="utf-8", errors="replace")
-                       for p in [ROOT / "README.md"] + sorted((ROOT / "docs").glob("*.md")) +
-                       sorted((ROOT / "bench" / "results").glob("*.md")) if p.exists())
-    doc = tok.encode(text)
-    lens = [n for n in (2048, 8192) if n + 64 <= ctx and n <= len(doc)]
-    log_path = ROOT / "maya-bench.log"
-    step(1, f"benchmark: {cfg_path.name} (loading the model first - a minute or a few)")
-    t0 = time.time()
-    with open(log_path, "w", encoding="utf-8") as log:
-        p = subprocess.Popen([cfg["exe"], "--serve"] + SV.engine_args(cfg), stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE, stderr=log, text=True, env=SV.child_env(cfg),
-                             cwd=cfg.get("cwd") or str(ROOT), bufsize=1)
-
-        multi = False   # (READY ... multi=<n>: a --parallel config's engine - its requests carry an id)
-
-        def gen(ids, n_new):
-            p.stdin.write(bench_gen_line(n_new, ids, multi))
-            p.stdin.flush()
-            while True:
-                line = p.stdout.readline()
-                if not line:
-                    fail("the engine stopped during the benchmark", f"its log: {log_path}")
-                f = bench_reply(line, multi)
-                if f is not None:
-                    return f
-
-        while True:
-            line = p.stdout.readline()
-            if not line:
-                fail("the engine stopped while loading", f"its log: {log_path}")
-            if line.startswith("READY"):
-                multi = any(w.startswith("multi=") for w in line.split())
-                break
-        ok(f"loaded in {time.time() - t0:.0f} s")
+    backend, gpus = cfg.get("backend", "cuda"), SV.gpu_list(cfg) or None
+    t_all = time.time()
+    step(1, f"benchmark: {cfg_path.name}" + (f" against {compare}" if compare else ""))
+    note = f"maya --bench pid {os.getpid()} on {socket.gethostname()} {time.strftime('%Y-%m-%d %H:%M')}"
+    why = MB.wait_quiet(backend, gpus, wait_min, say)
+    if why:
+        fail("this machine is not quiet enough for a speed number: " + "; ".join(why),
+             f"wait for it (or give it longer: {ME} --bench --bench-wait <minutes>), then run --bench again")
+    t_quiet = time.time() - t_all
+    locks = MB.take_locks(backend, gpus, note)
+    try:
+        tok = ST.Tokenizer.from_dir(tp)
+        ctx = int(args[args.index("--max-context") + 1]) if "--max-context" in args[:-1] else 32768
+        text = "\n\n".join(p.read_text(encoding="utf-8", errors="replace")
+                           for p in [ROOT / "README.md"] + sorted((ROOT / "docs").glob("*.md")) +
+                           sorted((ROOT / "bench" / "results").glob("*.md")) if p.exists())
+        prompts, warm = MB.plan_prompts(tok.encode(text), ctx)
         fmt = bench_chat(config_family(cfg), tp)   # (each family's own chat format, thinking off - #416, #549)
-        chat = lambda q: tok.encode(fmt(q), parse_special=True)   # noqa: E731
-        gen(chat("Say hello in five languages."), 64)          # warm-up: the first answer after a start is slower
-        results = []
-        for q in BENCH_TOPICS:
-            f = gen(chat(q), 256)
-            if f[0] == "DONE" and float(f[4]) > 0:
-                results.append(("decode", q, int(f[1]) / float(f[4]) * 1000.0, int(f[1])))
-                say(f"  decode  {results[-1][2]:6.1f} tokens/s   {q[:60]} ({f[1]} tokens)")
-            elif f[0] == "ERR":
-                warn("the engine refused a benchmark request: " + " ".join(f[1:]))
-        if lens:                                            # warm-up: the first prompt after a start is slower
-            gen(doc[-lens[0]:], 1)                          # (cold caches, issue #8); its opening is not reused below
-        for i, n in enumerate(lens):
-            f = gen(doc[i * 997:i * 997 + n], 1)            # different openings: nothing reused between them
-            if f[0] == "DONE" and float(f[3]) > 0:
-                results.append(("prefill", f"{n} tokens", n / float(f[3]) * 1000.0))
-                say(f"  prefill {results[-1][2]:6.0f} tokens/s   a {n}-token prompt")
-        p.stdin.write("QUIT\n")
-        p.stdin.flush()
-        try:
-            p.wait(timeout=120)
-        except subprocess.TimeoutExpired:
-            p.kill()
-    stats = speed_lines(log_path.read_text(encoding="utf-8", errors="replace").splitlines())
-    mean, n_mean = bench_decode_mean(results)
-    found = S.amd_gpus() if cfg.get("backend") == "hip" else S.gpus()
-    if cfg.get("backend") == "hip" and SV.gpu_list(cfg):
-        by_index = {g["index"]: g for g in found}
-        found = [by_index[i] for i in SV.gpu_list(cfg) if i in by_index]
-    gpus = ", ".join(f"{g['name']} {g['vram_gb']:.0f} GB" for g in found) or (
-        "the Apple GPU (Metal)" if cfg.get("backend") == "metal" else "?")
+        chats = [tok.encode(fmt(q), parse_special=True) for q in BENCH_TOPICS]
+        start = lambda c, cmd, env, tag: (cmd, env, c.get("cwd") or str(ROOT), ROOT / f"maya-bench{tag}.log")  # noqa
+        here = start(cfg, [cfg["exe"], "--serve"] + SV.engine_args(cfg), SV.child_env(cfg), "")
+        found = S.amd_gpus() if backend == "hip" else S.gpus()
+        if gpus:
+            by_index = {g["index"]: g for g in found}
+            found = [by_index[i] for i in gpus if i in by_index]
+        gpu_text, driver = MB.gpu_summary(backend, found)
+        base = {"machine": socket.gethostname().split(".")[0], "gpus": gpu_text, "driver": driver,
+                "model": bench_model_name(cfg), "date": time.strftime("%Y-%m-%d")}
+        if not compare:
+            before = MB.learned_listing(ROOT, cfg)
+            run = MB.run_session(here, chats, prompts, warm, "", say)
+            res = MB.summarize([run], prompts)
+            drafting = MB.drafting_choice(args, cfg.get("env") or {}, run["engine_lines"], res["answers"],
+                                        config_family(cfg))
+            new = sorted(set(MB.learned_listing(ROOT, cfg)) - set(before))
+            if new:                              # (a first start here: it measured this PC - not a speed number yet)
+                warn("this was the model's first start here: it measured this PC and wrote " +
+                     ", ".join(Path(p).name for p in new[:4]) + " - run --bench again for the speed number")
+            rec = dict(base, config=bench_config_text(cfg, ctx, drafting), commit=MB.commit_of(ROOT), version=version,
+                       decode=res["decode"], prompt=res["prompt"],
+                       note="; ".join(x for x in ("first start: rough" if new else "",
+                                                  "prompt reuse seen" if run["reused"] else "") if x))
+            lines = bench_text(version, cfg_path, cfg, ctx, gpu_text, res, drafting, [run], t_quiet, t_all)
+            records = [MB.record_line(rec)]
+        else:
+            lines, records = bench_compare(cfg, cfg_path, compare, rounds, here, start, chats, prompts, warm, base,
+                                           version, ctx, args, gpu_text, t_quiet, t_all, SV)
+    except RuntimeError as e:                    # (the engine stopped or refused, a build failed: said plainly)
+        fail(str(e), "fix that, then run --bench again")
+    finally:
+        MB.release_locks(locks, note)
+    out = ROOT / "maya-bench.txt"
+    stats = speed_lines((ROOT / "maya-bench.log").read_text(encoding="utf-8", errors="replace").splitlines()) \
+        if (ROOT / "maya-bench.log").exists() else []
+    out.write_text("\n".join(lines + records + ["", "engine lines:"] +
+                             [x.replace(str(Path.home()), "~") for x in stats[-40:]]) + "\n", encoding="utf-8")
+    with open(ROOT / MB.RESULTS_FILE, "a", encoding="utf-8") as f:
+        f.write("\n".join(records) + "\n")
+    say()
+    for x in lines + [""] + records:
+        say("  " + x)
+    ok(f"written: {out} (the result line also in {MB.RESULTS_FILE}) - attach it (with {ME} --report) to a speed "
+       "report")
+    return 0
+
+
+def bench_text(version, cfg_path, cfg, ctx, gpu_text, res, drafting, runs, t_quiet, t_all) -> list:
+    """maya-bench.txt's lines for one build."""
     total, _ = mem_gb()
     lines = [f"Kestrel {kestrel_version()} (build {version}) benchmark, {time.strftime('%Y-%m-%d %H:%M')}",
-             f"GPUs: {gpus}; RAM {total:.0f} GB; CPU {S.cpu_info()[0]}",
-             f"setup: {cfg_path.name}, context {ctx}, GPUs {cfg.get('gpu')}",
-             f"decode (writing the answer): mean {mean:.1f} tokens/s over {n_mean} answers of up to 256 tokens "
-             f"(greedy, thinking off)"]
-    lines += [f"  {r[2]:6.1f} tokens/s  {r[1]}" + (f" ({r[3]} tokens: not in the mean)" if r[3] < BENCH_MIN_ANSWER and
-                                                    n_mean < sum(x[0] == "decode" for x in results) else "")
-              for r in results if r[0] == "decode"]
-    lines += [f"prefill (reading the prompt): {r[2]:.0f} tokens/s, {r[1]}" for r in results if r[0] == "prefill"]
-    lines += ["", "engine lines:"] + [x.replace(str(Path.home()), "~") for x in stats[-40:]]
-    out = ROOT / "maya-bench.txt"
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    say()
-    for x in lines[:4 + len(results)]:
-        say("  " + x)
-    ok(f"written: {out} - attach it (with {ME} --report) to a speed report")
-    return 0
+             f"GPUs: {gpu_text}; RAM {total:.0f} GB; CPU {S.cpu_info()[0]}",
+             f"setup: {cfg_path.name}, context {ctx}, GPUs {cfg.get('gpu')}, drafting: {drafting}",
+             f"decode (writing the answer): median {MB.fmt_stats(res['decode'])} tokens/s over "
+             f"{len(res['answers']) - res['short']} answers of {MB.DECODE_TOKENS} tokens (greedy, thinking off)" +
+             (f"; {res['short']} ended early, left out" if res["short"] else "")]
+    lines += [f"prompt reading: {n // 1024}K tokens, median {MB.fmt_stats(s, 0)} tokens/s"
+              for n, s in sorted(res["prompt"].items())]
+    lines.append(f"wall time: quiet check {t_quiet:.0f} s, {MB.phase_line(runs)}; all {time.time() - t_all:.0f} s")
+    return lines
+
+
+def bench_compare(cfg, cfg_path, spec, rounds, here, start, chats, prompts, warm, base, version, ctx, args, gpu_text,
+                  t_quiet, t_all, SV):
+    """--bench --compare: this build and another on the same model files, config and learned files, alternated
+    (this, other, this, other ...), each round one engine session; exactness first, then the medians."""
+    other = MB.other_root(spec, ROOT, Path(cfg["exe"]), say)
+    ocfg = MB.map_cfg(cfg, ROOT, other)
+    if not Path(ocfg["exe"]).exists():
+        fail(f"--compare {spec}: its engine is not built ({ocfg['exe']})", "build it there first")
+    work = ROOT / ".bench-builds"
+    work.mkdir(exist_ok=True)
+    ocfg_file = work / "other-config.json"
+    ocfg_file.write_text(json.dumps(ocfg, indent=1), encoding="utf-8")
+    try:
+        cmd, env = MB.start_command(other, ocfg, ocfg_file)
+    except RuntimeError as e:                     # (an older build without this start code: this build's command)
+        warn(f"{e} - starting its engine with this build's command")
+        cmd, env = [ocfg["exe"], "--serve"] + SV.engine_args(ocfg), SV.child_env(ocfg)
+    there = start(ocfg, cmd, env, "-other")
+    learned = MB.LearnedState(ROOT, cfg, work / "learned-snapshot")
+    runs = {"this": [], "other": []}
+    try:
+        for r in range(rounds):
+            for side in ("this", "other"):
+                learned.restore(other if side == "other" else None)
+                say(f"  round {r + 1} of {rounds}: {side} build")
+                runs[side].append(MB.run_session(here if side == "this" else there, chats, prompts, warm,
+                                                 f"[{side}] ", say))
+                if r == 0 and side == "this":
+                    learned = learned.adopt(cfg)  # (learned at a first start: kept, so no later round learns again)
+    finally:
+        learned.finish()
+    res = {k: MB.summarize(v, prompts) for k, v in runs.items()}
+    verdict, exact = MB.exact_verdict([r["tokens"] for r in runs["this"]], [r["tokens"] for r in runs["other"]])
+    again = {k: MB.exactness(v[0]["tokens"], v[-1]["tokens"]) for k, v in runs.items() if len(v) > 1}
+    o_ver = (other / "VERSION").read_text().strip() if (other / "VERSION").exists() else "?"
+    names = {"this": f"{MB.commit_of(ROOT)} (v{version})", "other": f"{MB.commit_of(other)} (v{o_ver})"}
+    records, lines = [], []
+    for side, root, ver in (("other", other, o_ver), ("this", ROOT, version)):
+        drafting = MB.drafting_choice(args, cfg.get("env") or {}, runs[side][0]["engine_lines"], res[side]["answers"],
+                                        config_family(cfg))
+        records.append(MB.record_line(dict(base, config=bench_config_text(cfg, ctx, drafting),
+                                           commit=MB.commit_of(root), version=ver, decode=res[side]["decode"],
+                                           prompt=res[side]["prompt"], note=f"A/B {rounds} rounds")))
+        lines += [f"{side} build {names[side]}: {root}"] + [
+            "  " + x for x in bench_text(ver, cfg_path, cfg, ctx, gpu_text, res[side], drafting, runs[side],
+                                         t_quiet, t_all)[2:]]
+    lines.append("exactness (greedy tokens of every bench request, this vs other, every pairing of rounds): " +
+                 verdict + ("" if not exact else " - " + "; ".join(exact)))
+    for side, d in again.items():
+        lines.append(f"  {side} build, round 1 vs round {rounds}: " + ("equal" if not d else "; ".join(d)))
+    if any(again.values()):
+        lines.append("  (a build that differs from itself between starts: this engine is not repeatable start to "
+                     "start on this PC, so a difference between the builds is not proof of an answer change)")
+    lines.append(f"wall time all: {time.time() - t_all:.0f} s (quiet check {t_quiet:.0f} s)")
+    records.append(MB.compare_line(res["other"], res["this"], names["other"], names["this"], verdict))
+    return lines, records
 
 
 # ------------------------------------------------------------------------------------------------ the setup
@@ -7277,6 +7428,10 @@ def _set_up(a, prev: dict) -> Path | None:
             if S.UI is not None:
                 S.UI.step(9, "speed calibration: drafting or not")
             speed_calibration(cfg_path, measure_asked(a))
+    elif glm_draft_length_wanted(read_json(cfg_path)) and not getattr(a, "no_speed_calibration", False):
+        if S.UI is not None:
+            S.UI.step(9, "speed calibration: the draft length")
+        speed_calibration(cfg_path, measure_asked(a))
     # the tuning: asked for (--calibrate), or offered when nothing was tuned for this PC and model yet and someone
     # answers (--yes and --no-start setups are not held up by it)
     tuned = None
@@ -11154,7 +11309,8 @@ def ik2_about() -> str:
     return ("An EXPERIMENTAL PREVIEW: thinkingmachines' Inkling-2-Mini (26B, a looped model: 8 of 128 experts a token) "
             f"on its own engine, in unsloth's UD-Q4_K_XL GGUF ({gb}); NVIDIA V100 / "
             "RTX 20 and newer with 8 GB or more (experts that do not fit in VRAM stay in RAM: about 13 GB of RAM with an 8 GB card), or "
-            "AMD RDNA 3 / 3.5 / 4 or a Halo / APU with 24 GB (every expert in memory); Linux only; tool calls, "
+            "AMD RDNA 3 / 3.5 / 4 with 12 GB or more (the same: experts that do not fit stay in RAM) or a Halo / APU "
+            "with 24 GB (every expert in memory); Linux only; tool calls, "
             "its thinking levels, up to a 256K context, pictures (its vision tower, 0.6 GB), drafting on RTX 30 / A100 "
             "and newer with every expert in VRAM, or AMD (its own drafter, 0.6 GB, and the prompt lookup: measured once on this PC, the same answers); "
             "one answer at a time.")
@@ -11219,29 +11375,54 @@ def ik2_tokenizer_step(a, d: Path, gguf: Path) -> Path:
 
 
 def ik2_vision_model() -> dict | None:
-    """The model's vision tower as offer_download's form (tools/ik2/download.json's "vision": unsloth's mmproj of
-    Inkling-2-Mini's tower, from the GGUF's repo and revision), or None when the manifest names none."""
+    """The model's vision tower as offer_download's form (tools/ik2/download.json's "vision": the mmproj of
+    Inkling-2-Mini's tower from Maya's own repo - unsloth's conversion byte for byte), or None when the manifest
+    names none."""
     man = read_json(IK2_MANIFEST).get("vision") or {}
     if not man.get("files") or not man.get("repo") or not man.get("revision"):
         return None
-    return {"about": f"{IK2_SHOWN}'s vision tower (it lets the model read pictures): unsloth's mmproj of the model's "
+    return {"about": f"{IK2_SHOWN}'s vision tower (it lets the model read pictures): the mmproj of the model's "
                      "own tower (BF16)", "format": "mmproj",
             "repo": man["repo"], "revision": man["revision"], "folder": man.get("folder", ""),
             "files": {k: v[0] for k, v in man["files"].items()}, "sha256": {k: v[1] for k, v in man["files"].items()},
             "download_gb": sum(v[0] for v in man["files"].values()) / 1e9}
 
 
-def ik2_drafter_model() -> dict | None:
-    """The model's drafter as offer_download's form (tools/ik2/download.json's "drafter": thinkingmachines' own
-    mtp.safetensors at a pinned revision), or None when the manifest names none."""
+def ik2_drafter_model(amd: bool = False, name: str | None = None) -> dict | None:
+    """The model's drafter as offer_download's form (tools/ik2/download.json's "drafter": Inkling-2-Mini's own drafter
+    from Maya's own repo at a pinned revision), or None when the manifest names none.  One file of the manifest's two
+    forms of it: `name`, else the one the setup fetches - the GGUF (Q8_0, unsloth's conversion: the engine's fastest
+    drafting path, "default"; on AMD the manifest's "amd" - the GGUF too, measured there as well)."""
     man = read_json(IK2_MANIFEST).get("drafter") or {}
     if not man.get("files") or not man.get("repo") or not man.get("revision"):
         return None
+    pick = name or (man.get("amd") if amd else None) or man.get("default")
+    if pick not in man["files"]:
+        pick = next(iter(man["files"]))
+    size, sha = man["files"][pick]
+    form = "GGUF, Q8_0" if pick.endswith(".gguf") else "safetensors, BF16"
     return {"about": f"{IK2_SHOWN}'s drafter (it drafts tokens the model checks: faster answers, the same ones): "
-                     f"thinkingmachines' own ({man.get('license', 'Apache 2.0')})", "format": "safetensors",
+                     f"the model's own ({form}; {man.get('license', 'Apache 2.0')})",
+            "format": "gguf" if pick.endswith(".gguf") else "safetensors",
             "repo": man["repo"], "revision": man["revision"], "folder": man.get("folder", ""),
-            "files": {k: v[0] for k, v in man["files"].items()}, "sha256": {k: v[1] for k, v in man["files"].items()},
-            "download_gb": sum(v[0] for v in man["files"].values()) / 1e9}
+            "files": {pick: size}, "sha256": {pick: sha}, "download_gb": size / 1e9}
+
+
+def ik2_drafter_here(d: Path, amd: bool = False) -> tuple[Path, dict] | None:
+    """A whole copy of the drafter already beside the model (in d), with its form's entry, or None: the form the setup
+    fetches on this PC first, else the other one (its size and sha256 the published ones) - what the engine drafts
+    with where this PC's form was not downloaded (an earlier setup's mtp.safetensors)."""
+    man = read_json(IK2_MANIFEST).get("drafter") or {}
+    first = ik2_drafter_model(amd)
+    if first is None:
+        return None
+    pick = next(iter(first["files"]))
+    for n in [pick] + [n for n in man["files"] if n != pick]:
+        m = ik2_drafter_model(amd, n)
+        f = d / n
+        if file_incomplete(m, f) is None and (n == pick or sha256_checked(f, m["sha256"][n])):
+            return f, m                                # (the fetched form's sha256: the step's own check, which fails)
+    return None
 
 
 def ik2_drafting(a) -> str:
@@ -11252,23 +11433,29 @@ def ik2_drafting(a) -> str:
     return how if how in ("on", "off") else "auto"
 
 
-def ik2_drafter_step(a, d: Path, vram: float, ctx: int, kv: str) -> Path | None:
-    """The drafter beside the GGUF (in d), downloaded when it is not there and checked against its published sha256,
-    or None: drafting off (--drafting off), or not downloaded - the engine then drafts with the prompt lookup alone.
+def ik2_drafter_step(a, d: Path, vram: float, ctx: int, kv: str, amd: bool = False) -> Path | None:
+    """The drafter beside the GGUF (in d) - the form this PC's engine drafts with best (ik2_drafter_model), downloaded
+    from Maya's repo when it is not there (an earlier setup's mtp.safetensors stays on the disk, and is
+    what the engine drafts with where the GGUF was not downloaded) - checked against its published sha256, or None: drafting off (--drafting off), or not downloaded - the engine then drafts with the prompt lookup alone.
     Truthful about this card: where the drafter's room does not fit beside the model at this context, the engine
     leaves it out at its start (the plan as without it)."""
     how = ik2_drafting(a)
     if how == "off":
         ok("drafting: off (--drafting off) - every token from a full model step")
         return None
-    m = ik2_drafter_model()
+    m = ik2_drafter_model(amd)
     if m is None:
         warn(f"{IK2_MANIFEST} names no drafter: drafting with the prompt lookup alone")
         return None
     files = [d / n for n in m["files"]]
     if any(file_incomplete(m, f) for f in files) and not offer_download(a, "the drafter", d, files, m):
-        warn(f"the drafter was not downloaded: drafting with the prompt lookup alone ({ME} --setup asks again)")
-        return None
+        here = ik2_drafter_here(d, amd)                # (the other form, from an earlier setup: the same drafter)
+        if here is None:
+            warn(f"the drafter was not downloaded: drafting with the prompt lookup alone ({ME} --setup asks again)")
+            return None
+        warn(f"{files[0].name} was not downloaded: drafting with {here[0].name}, which is already here "
+             f"({ME} --setup asks again)")
+        files, m = [here[0]], here[1]
     for f in files:
         if not sha256_checked(f, m["sha256"][f.name]):
             f.unlink(missing_ok=True)                  # else the next run finds it complete and fails here again
@@ -11297,12 +11484,26 @@ def ik2_vision_step(a, pc: dict, meta: dict, llama: Path, d: Path) -> dict | Non
     if m is None:
         warn(f"{IK2_MANIFEST} names no vision tower: the model reads text only")
         return None
-    files = [d / n for n in m["files"]]
-    if any(file_incomplete(m, f) for f in files) and not offer_download(a, "the vision tower", d, files, m):
+    legacy = (read_json(IK2_MANIFEST).get("vision") or {}).get("legacy_names") or []
+    files, fetch = [], []                              # (the files used; the ones to fetch, by their names here)
+    for n in m["files"]:
+        f = d / n
+        if file_incomplete(m, f):
+            # (before Maya's own repo the tower came as unsloth's mmproj-BF16.gguf - the same bytes: a copy of it on
+            #  the disk whose size and sha256 match is kept under its name, not downloaded again)
+            old = next((d / o for o in legacy if (d / o).is_file() and (d / o).stat().st_size == m["files"][n]
+                        and sha256_checked(d / o, m["sha256"][n])), None)
+            if old is not None:
+                ok(f"the vision tower: {old.name} is already here (the same file as {n})")
+                f = old
+            else:
+                fetch.append(f)
+        files.append(f)
+    if fetch and not offer_download(a, "the vision tower", d, fetch, m):
         warn(f"the vision tower was not downloaded: the model reads text only ({ME} --setup asks again)")
         return None
-    for f in files:                                    # (offer_download checked the ones it fetched; these too)
-        if not sha256_checked(f, m["sha256"][f.name]):
+    for f, n in zip(files, m["files"]):                # (offer_download checked the ones it fetched; these too)
+        if not sha256_checked(f, m["sha256"][n]):
             f.unlink(missing_ok=True)                  # else the next run finds it complete and fails here again
             fail(f"{f}: the sha256 does not match the published one (the file was removed)", "run the setup again")
     if not vision_encoder_ready(a, pc, meta, llama):
@@ -11411,13 +11612,15 @@ def set_up_ik2(a, prev: dict) -> Path | None:
     pc = check_pc(a, "ik2")                            # 1
     vram = float(pc["gpus"][0].get("vram_gb") or 0)
     amd = pc.get("backend") == "hip"
-    if amd:   # (AMD, Linux: RDNA 3 / 3.5 / 4 with every expert in memory; an APU's is the RAM, less what is kept free)
+    apu = False
+    if amd:   # (AMD, Linux: RDNA 3 / 3.5 / 4 - a card from 12 GB, the offload path under 24; an APU's memory is the RAM)
         g = dict(pc["gpus"][0])
         if hip_unified_memory(g):
             ram = mem_gb()[0]
             g.update(unified_memory=True, memory_gb=apu_memory(vram, ram, not WIN) - apu_margin_gb(ram))
             vram = g["memory_gb"]
-        why = IK2F.unsupported("hip", WIN, len(pc["gpus"]), [g])
+            apu = True
+        why = IK2F.unsupported("hip", WIN, len(pc["gpus"]), [g], mem_gb()[0])
         if why:
             fail(why)
     else:   # (Windows: the card as CUDA gets it, measured - the figure the engine plans with)
@@ -11431,14 +11634,15 @@ def set_up_ik2(a, prev: dict) -> Path | None:
          "team on V100s (Linux) and an RTX 3050 8 GB (Windows), not yet on every card - tell us how it goes in "
          "an issue" if not amd else
          f"{IK2_SHOWN} on AMD is an experimental preview: run by Maya's team on a Radeon 8065S (Gorgon Halo, "
-         "Linux), not yet on Radeon RX 7000 / 9000 cards - tell us how it goes in an issue")
+         "Linux, also set as a 12 and a 16 GB card), not yet on Radeon RX 7000 / 9000 cards - tell us how it goes "
+         "in an issue")
     m = ik2_entry()
     ok(f"model: {Q.shown('ik2', Q.IK2_QUANT, m['download_gb'])} - thinkingmachines' Inkling-2-Mini in unsloth's GGUF "
        "(Apache 2.0)")
     kv = str((prev.get("env") or {}).get("IK2_KV") or IK2F.DEFAULT_KV)
     rec = IK2F.recommended_context(vram, kv)
     ctx = choose_context(a, prev_ctx, IK2F.CONTEXTS, rec)
-    fit = IK2F.plan(vram, ctx, kv, amd)
+    fit = IK2F.plan(vram, ctx, kv, apu)
     kv_gb = ctx * IK2F.KV_BYTES.get(kv, IK2F.KV_BYTES['f16']) / 2**30
     ok(f"context: {ctx} tokens" + (" (recommended for this card's VRAM)" if ctx == rec else "") +
        (f"; its cache: {kv_gb:.1f} GB ({kv.upper()}), about {fit['kv_ram_gib']:.0f} GB of it in RAM (KV streaming)"
@@ -11454,13 +11658,13 @@ def set_up_ik2(a, prev: dict) -> Path | None:
         else:
             warn(f"two GPUs at {context_label(ctx)}: {line}" + (" - it may not start" if word == "tight" else ""))
     elif fit["resident"] and fit.get("kv_streamed"):   # (one GPU only: KV streaming is off on two GPUs)
-        word, line = IK2F.verdict(vram, mem_gb()[0], ctx, kv, amd)
+        word, line = IK2F.verdict(vram, mem_gb()[0], ctx, kv, apu)
         warn(line if word == "does not fit" else
              f"at {context_label(ctx)}: {line} (a context of {context_label(rec)} keeps the cache in VRAM)")
     elif not fit["resident"]:
-        word, line = IK2F.verdict(vram, mem_gb()[0], ctx, kv, amd)
+        word, line = IK2F.verdict(vram, mem_gb()[0], ctx, kv, apu)
         keep = (f" (a context of {context_label(rec)} keeps everything in VRAM)"
-                if IK2F.plan(vram, rec, kv, amd)["resident"] else "")
+                if IK2F.plan(vram, rec, kv, apu)["resident"] else "")
         warn(f"at {context_label(ctx)} the model and its cache do not all fit in this card's {vram:.0f} GB: "
              f"{line}{keep}" + (" - it may not start" if word == "tight" else ""))
     models = (Path(a.models_dir).expanduser().resolve() if a.models_dir else
@@ -11476,15 +11680,14 @@ def set_up_ik2(a, prev: dict) -> Path | None:
     gguf = ik2_model_step(a, d, models)               # 5
     if gguf is None:
         return None
-    off = IK2F.drafting_off_reason(None if amd else pc["gpus"][0].get("arch"), vram, ctx, kv, amd)
-    if vram1 and IK2F.plan_two(vram, vram1, ctx, kv)["gpus"] == 2:
-        off = "drafting off: on two GPUs it is not checked yet - every token comes from a full model step"
-    if off:                                            # (Volta / Turing, the offload path: no drafter, drafting off)
+    off = IK2F.drafting_off_reason(None if amd else pc["gpus"][0].get("arch"), vram, ctx, kv, amd, apu,
+                                   bool(vram1) and IK2F.plan_two(vram, vram1, ctx, kv)["gpus"] == 2)
+    if off:                                            # (a streamed cache, no room: no drafter, drafting off)
         ok(off)
         a.drafting = "off"
         drafter = None
     else:
-        drafter = ik2_drafter_step(a, d, vram, ctx, kv)   # (5: its drafter)
+        drafter = ik2_drafter_step(a, d, vram, ctx, kv, amd)   # (5: its drafter)
     tok = ik2_tokenizer_step(a, d, gguf)              # 6
     vision = ik2_vision_step(a, pc, meta, llama, d)   # 7
     return write_config_ik2(a, pc, meta, gguf, tok, ctx, models, d, vision, drafter)   # 8
@@ -11686,6 +11889,13 @@ def main() -> int:
     ap.add_argument("--bench", action="store_true", help="a standard speed test of the installed model (a few "
                                                          "minutes, with Kestrel stopped): decode on three questions and "
                                                          "prefill at 2k / 8k tokens; writes maya-bench.txt")
+    ap.add_argument("--compare", metavar="BUILD", help="with --bench: an A/B against another build - a Kestrel folder "
+                                                       "(its engine built) or a git ref (checked out and built once "
+                                                       "in .bench-builds) - on the same model files, config and "
+                                                       "learned files, alternated; exactness first, then the speed")
+    ap.add_argument("--bench-rounds", type=int, default=2, help="--bench --compare: rounds a build (default 2)")
+    ap.add_argument("--bench-wait", type=float, default=10.0, help="--bench: minutes to wait for a quiet machine "
+                                                                   "before refusing (default 10; 0 = refuse at once)")
     ap.add_argument("--calibrate", action="store_true",
                     help="tune the engine's CPU lane for this PC (the PCIe share and the CPU threads, ~10-15 minutes; "
                          f"{DS4}: the tensor parallel groups and the CPU threads, an engine start each, ~25-40 "
@@ -11738,13 +11948,15 @@ def main() -> int:
         return report(version, a.backend, a.config)
     if a.import_model:
         return import_model(a, a.import_model)
+    if a.compare and not a.bench:
+        ap.error("--compare goes with --bench")
     if a.bench:
         have = [a.config] if a.config is not None else configs()
         if a.backend:
             have = [p for p in have if read_json(p).get("backend", "cuda") == a.backend]
         if not have:
             fail("Kestrel is not set up here yet", f"run {ME} first")
-        return bench(have[0], version)
+        return bench(have[0], version, a.compare, max(1, a.bench_rounds), max(0.0, a.bench_wait))
 
     have = configs() if a.config is None else [a.config.resolve()]   # (--config: that one, no question)
     if a.backend:

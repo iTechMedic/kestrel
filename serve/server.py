@@ -65,6 +65,7 @@ ENGINE_VISION = (ds4_vision.Vision, mm3_vision.Vision)   # the engines that run 
 HY4_TEXT_ONLY = "Hy4-Flash with its pictures off"         # (no vision tower loaded: the errors' name for it)
 HY4_LANE_FILE = ROOT / "data" / "hy4-cpu-lane.txt"        # (maya-hy4's 4-bit copies' verdict on this PC: child_env)
 HY4_ROUTE_FILE = ROOT / "data" / "hy4-prompt-route.txt"   # (... its prompt route's rates measured on this PC: child_env)
+GLM_CPU_CAL_FILE = ROOT / "data" / "glm-cpu-cal.txt"      # (the GLM engine's CPU lane timing, kept from its first start)
 HY4_DRAFT_FILE = ROOT / "data" / "hy4-drafting.txt"       # (... and its drafting, --drafting auto: child_env)
 HY4_MEASURE_DOCS = ("docs/SETTINGS.md", "README.md")      # (... the text its first start measures them on: hy4_measure_ids)
 HY4_MEASURE_CHARS = 200_000                               # (... about 55K tokens of it: up to 12 prompt chunks of 4096)
@@ -78,6 +79,24 @@ def hy4_hot_file(cfg: dict) -> Path:
     name = "" if pack is None else pack.parent.name if pack.name == "maya-hy4" else pack.name
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._") or "model"
     return ROOT / "data" / f"hy4-expert-hot-{name}.bin"
+
+
+HY4_HOT_SEEDS = ROOT / "data" / "hy4-hot-seed"            # (the scores Maya ships, a file a size: hy4_hot_seed)
+#                                                          (Maya-S and -L: Maya-XS's copied, until learned on their own packs)
+
+
+def hy4_hot_seed(cfg: dict) -> Path | None:
+    """The HY4_HOT scores Maya ships for this config's model - data/hy4-hot-seed/hy4-expert-hot-<folder>.bin, the
+    folder's name as hy4_hot_file has it (a layout's folder, Hy4-Flash-Maya-XS-8GB, takes its size's) - for a PC that
+    has no file of its own yet: its first start then places the experts as every start after it.  None: no such set."""
+    name = hy4_hot_file(cfg).name
+    stem = name[len("hy4-expert-hot-"):-len(".bin")]
+    size = re.match(r"(Hy4-Flash-Maya-[A-Za-z0-9]+)-", stem)
+    for s in dict.fromkeys([stem] + ([size.group(1)] if size else [])):
+        p = HY4_HOT_SEEDS / f"hy4-expert-hot-{s}.bin"
+        if p.is_file():
+            return p
+    return None
 
 
 def hy4_measure_ids(cfg: dict) -> Path | None:
@@ -2357,7 +2376,7 @@ def engine_args(cfg: dict) -> list[str]:
     # (measured on a 20 GB RTX 4000 Ada: 2 conversations 24.5 tok/s aggregate, 3 unusable).
     # MAYA_PAR_MAX caps the conversations asked of the engine before it starts; the requests beyond it wait in
     # this server's own queue instead of starving the others.  MAYA_PAR_MAX=2 on that card, for example.
-    # (the config's own env keys are renamed to their older STRATA_ names by env_in on load: both are read)
+    # (the config's own env keys are renamed to their older MAYA_ names by env_in on load: both are read)
     _env = cfg.get("env") or {}
     cap = (_env.get("MAYA_PAR_MAX") or _env.get(maya_names.read_as("MAYA_PAR_MAX")) or
            os.environ.get("MAYA_PAR_MAX"))
@@ -2466,7 +2485,7 @@ def child_env(cfg: dict) -> dict:
         env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"      # own default order (fastest first) can number the cards otherwise
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in gpu_list(cfg))
     # engine settings the config carries (AMD: the GEMM tuning table), under BOTH names: env_in left the config with the
-    # older STRATA_ one, and some of the engines' settings are read by their MAYA_ name alone (issue #686)
+    # older MAYA_ one, and some of the engines' settings are read by their MAYA_ name alone (issue #686)
     maya_names.export_env(env, cfg.get("env"))
     # DeepSeek's fast prompt reading (the config's "fast_prefill", the Models page's switch, --fast-prefill on|off):
     # the long prompt's skip as a per-layer cone in maya-ds4 (DS4_YOCO_CONE).  Opt-in - the same sums, but a kernel's
@@ -2477,6 +2496,12 @@ def child_env(cfg: dict) -> dict:
     # Hy4-flash's CPU lane: whether its 4-bit expert copies pay is measured once on this PC (the engine's timed turns,
     # once its experts are warm) and remembered in the data folder beside the expert profiles - per PC, model and
     # lane kernels (maya --speed-calibration measures again)
+    # GLM's CPU lane: its timing (an expert on the CPU vs over PCIe), which plans the split of RAM-tier experts between
+    # the CPU and the GPU, timed at the first start on this PC and kept - re-timed at every start it moved experts
+    # between the two (other bits) and so the same request's greedy answer from start to start (the engine re-times
+    # by itself when decode drifts from it for 5 requests in a row; a new build has its own entry)
+    if models.family(cfg) == "glm":
+        env.setdefault("MAYA_GLM_CPU_CAL", str(GLM_CPU_CAL_FILE))
     if models.family(cfg) == "hy4":
         env.setdefault("HY4_Q4X_FILE", str(HY4_LANE_FILE))
         # (... and the prompt route's rates - a chunk's experts outside VRAM streamed to the GPU or on the CPU lane -
@@ -2492,6 +2517,11 @@ def child_env(cfg: dict) -> dict:
         # (... and HY4_HOT's scores - which experts a start places in VRAM - learned by the first start, then kept as
         #  they are until maya --speed-calibration: a file a model in the data folder, not in its download)
         env.setdefault("HY4_HOT_FILE", str(hy4_hot_file(cfg)))
+        # (... and, where this PC has no such file yet, the scores Maya ships for the model - a first start places the
+        #  experts as every start after it; a file of its own, learned or left by maya --speed-calibration, wins)
+        seed = hy4_hot_seed(cfg)
+        if seed is not None:
+            env.setdefault("HY4_HOT_SEED", str(seed))
         # (... and both measured at the first start on this PC before the engine says READY, on this install's docs
         #  in the model's tokens - not while the first answers read their prompts, 2.5-3x slower then)
         if "HY4_MEASURE_IDS" not in env:
