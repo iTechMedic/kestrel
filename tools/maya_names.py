@@ -58,7 +58,8 @@ def lookup(env, name: str, default=None):
     """A setting from a dict/environment by either of its names (the MAYA_ one first).  A config in memory has its
     settings under the names the code reads (env_in), the shell and the dashboard under the names users see - code
     that reads a setting from either must not care which."""
-    for k in both_names(name):
+    m, old, kestrel = both_names(name)
+    for k in (m, kestrel, old):                  # (the order the docstring sets: MAYA_, then KESTREL_, then STRATA_)
         v = env.get(k)
         if v is not None:
             return v

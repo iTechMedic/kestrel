@@ -3056,11 +3056,19 @@ def compile_engine_hip(pc: dict, llama: Path, src: str, soft=False, target: str 
         managed = f"-isystem {(root / 'include').as_posix()}"
         cache = BUILD / "CMakeCache.txt"
         m = re.search(r"^CMAKE_HIP_FLAGS:\w+=(.*)$", cache.read_text(errors="replace"), re.M) if cache.exists() else None
+        def unmanaged(flags: str) -> list:   # (the exact pair taken out: not "-isystem <root>/include/hip" or "...2")
+            t, out, i = flags.split(), [], 0
+            while i < len(t):
+                if t[i] == "-isystem" and i + 1 < len(t) and t[i + 1] == (root / "include").as_posix():
+                    i += 2
+                    continue
+                out.append(t[i])
+                i += 1
+            return out
         if shadowed:
-            base = (m.group(1) if m else env.get("HIPFLAGS", "")).replace(managed, "").split()
-            conf.append("-DCMAKE_HIP_FLAGS=" + " ".join(base + [managed]))
-        elif m and managed in m.group(1):
-            conf.append("-DCMAKE_HIP_FLAGS=" + " ".join(m.group(1).replace(managed, "").split()))
+            conf.append("-DCMAKE_HIP_FLAGS=" + " ".join(unmanaged(m.group(1) if m else env.get("HIPFLAGS", "")) + [managed]))
+        elif m and unmanaged(m.group(1)) != m.group(1).split():
+            conf.append("-DCMAKE_HIP_FLAGS=" + " ".join(unmanaged(m.group(1))))
         if shadowed:
             ok(f"ROCm's headers from {root / 'include'}, ahead of another ROCm's in /usr/include ({', '.join(shadowed)})")
     jobs = max(1, min(4, (os.cpu_count() or 4) // 2))
@@ -6746,7 +6754,7 @@ def after_server(rc: int, a) -> int:
 # ------------------------------------------------------------------------------------------------ the report
 # the engine log's lines that tell where the time goes: how the model was split across VRAM / RAM / the SSD, the
 # prompt path's chunks, and the per-token breakdown ("glm stat": VRAM hits, RAM fetches, disk reads, CPU lane)
-REPORT_LINES = re.compile(r"glm fast:|glm prefill: (?:CUDA|HIP)|glm split|glm stat|glm slots|glm vram|ds4 serve: prompt read|glm prefill: \d|ERR|error|failed|"
+REPORT_LINES = re.compile(r"glm fast:(?! CUDA\d+ warming the expert tiers)|glm prefill: (?:CUDA|HIP)|glm split|glm stat|glm slots|glm vram|ds4 serve: prompt read|glm prefill: \d|ERR|error|failed|"
                           r"out of memory|"
                           # maya-ds4's placement and speed lines (issue #416), not its loading progress
                           r"^ds4: (?!copying experts |experts \d+ / |loading \d)|^ds4 (?:slots|cache):|^(?:maya|kestrel)-ds4:|"

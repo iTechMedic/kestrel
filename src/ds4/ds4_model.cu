@@ -289,20 +289,23 @@ uint64_t ram_avail() {
 #if defined(_WIN32)
     return os::ram_avail();
 #endif
-    uint64_t avail = ~uint64_t{0}, total = 0, gpu_reclaim = 0, held = 0;
+    uint64_t avail = ~uint64_t{0}, total = 0, gpu_reclaim = 0, held = 0, huge_n = 0, huge_kb = 0;
     {
         std::istringstream mi(read_file("/proc/meminfo"));
         std::string k;
         uint64_t kb = 0;
-        while (mi >> k >> kb) {
+        while (mi >> k >> kb) {   // (HugePages_Total has no unit: a count)
             if (k == "MemAvailable:") avail = kb << 10;
             else if (k == "MemTotal:") total = kb << 10;
             else if (k == "GPUReclaim:") gpu_reclaim = kb << 10;
+            else if (k == "HugePages_Total:") huge_n = kb;
+            else if (k == "Hugepagesize:") huge_kb = kb;
             else if (k == "AnonPages:" || k == "Shmem:" || k == "SUnreclaim:" || k == "KernelStack:" ||
-                     k == "PageTables:")
-                held += kb << 10;
+                     k == "PageTables:" || k == "Unevictable:")   // (Unevictable: mlocked pages - with anon ones
+                held += kb << 10;                                  //  in AnonPages too, so it errs low)
             mi.ignore(64, '\n');
         }
+        held += (huge_n * huge_kb) << 10;   // (reserved huge pages: neither free nor anyone's anon)
     }
     if (avail != ~uint64_t{0}) {
         const uint64_t ceiling = total != 0 ? total : ~uint64_t{0};
@@ -318,11 +321,8 @@ uint64_t ram_avail() {
                                                              : std::getenv("DS4_GPU_RECLAIM");
         if (gpu_reclaim > 0 && total > avail + held && !(gr != nullptr && std::atoi(gr) == 0)) {
             uint64_t gtt_used = 0;
-            std::error_code ec;
-            for (const auto& ent : std::filesystem::directory_iterator("/sys/class/drm", ec)) {
-                const std::string n = ent.path().filename().string();
-                if (n.rfind("card", 0) != 0 || n.find('-') != std::string::npos) continue;   // (not card1-DP-1 etc.)
-                const std::string v = read_file(ent.path().string() + "/device/mem_info_gtt_used");
+            for (int i = 0; i < 64; ++i) {   // (the DRM cards by number; one that is not there reads as empty)
+                const std::string v = read_file("/sys/class/drm/card" + std::to_string(i) + "/device/mem_info_gtt_used");
                 if (!v.empty()) gtt_used += std::strtoull(v.c_str(), nullptr, 10);
             }
             const uint64_t room = total - avail - held;

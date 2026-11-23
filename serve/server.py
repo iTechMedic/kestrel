@@ -3318,6 +3318,9 @@ class Service:
             print(f"[maya] reloading the model with a {n}-token context (was {old}) ...", flush=True)
             err = None
             t0 = time.time()
+            was = self._life                             # (Kestrel: after an idle unload the reload starts it - its
+            if was == "unloaded":                        #  life moves on too, not "unloaded" while it runs)
+                self._set_life("loading")
             try:
                 self._restart_with(n)
                 self.engine.load_s = round(time.time() - t0, 1)
@@ -3328,6 +3331,9 @@ class Service:
                     self._restart_with(old)
                 except Exception as e2:  # noqa: BLE001
                     err += f"; starting again with {old} failed too ({e2}) - the next request tries once more"
+            if was == "unloaded":
+                up = not hasattr(self.engine, "alive") or self.engine.alive()
+                self._set_life("running" if up else "unloaded")
             places = max(1, int(getattr(self.engine, "multi", 0) or 1))   # the reloaded engine's conversations
             if places != self.fifo.capacity:
                 self.fifo.set_capacity(places)

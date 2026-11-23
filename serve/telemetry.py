@@ -685,7 +685,8 @@ def rocminfo_names(text=None) -> dict:
     """{PCI location (KFD's location_id): marketing name} of rocminfo's GPU agents; {} without rocminfo.  `text`:
     rocminfo's output to read instead of running it (tests)."""
     global _ROCMINFO
-    if text is None:
+    ran = text is None                                   # (Kestrel: only a real run is kept - not a test's text)
+    if ran:
         if _ROCMINFO is not None:
             return _ROCMINFO
         exe = next((p for p in (os.path.join(os.environ.get("ROCM_PATH") or "/opt/rocm", "bin", "rocminfo"),
@@ -704,8 +705,8 @@ def rocminfo_names(text=None) -> dict:
                 f[k.strip()] = v.strip()
         if f.get("Device Type") == "GPU" and f.get("Marketing Name") and (f.get("BDFID") or "").isdigit():
             names[int(f["BDFID"])] = f["Marketing Name"]
-    if not text or names:
-        _ROCMINFO = names
+    if ran:                                              # (also with no GPU agent listed: one run a process - each
+        _ROCMINFO = names                                #  can take up to 20 s; the names fall back to pci.ids)
     return names
 
 

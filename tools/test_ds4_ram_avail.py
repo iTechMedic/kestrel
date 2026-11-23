@@ -92,6 +92,25 @@ int main() {
     check("file cache above current cannot underflow", 10 * GiB);
     files["/proc/meminfo"] = "MemTotal: 67108864 kB\n";
     check("cgroup caps unknown host availability", 10 * GiB);
+    // (Kestrel) GPUReclaim - the GPU drivers' page pool: counted up to what MemAvailable leaves out less what is held
+    // (anon, shmem, unreclaimable slab, stacks, page tables, unevictable, reserved huge pages) and the live GTT
+    files.clear();
+    files["/proc/meminfo"] = "MemTotal: 67108864 kB\nMemAvailable: 8388608 kB\nAnonPages: 4194304 kB\n"
+                             "GPUReclaim: 41943040 kB\n";
+    check("GPU pool counted", 48 * GiB);
+    files["/proc/meminfo"] += "GPUReclaim: 335544320 kB\n";
+    check("GPU pool above the RAM: capped by what is not held", 60 * GiB);
+    files["/proc/meminfo"] += "Unevictable: 8388608 kB\nHugePages_Total: 4096\nHugepagesize: 2048 kB\n";
+    check("unevictable and reserved huge pages are not free", 44 * GiB);
+    files["/sys/class/drm/card1/device/mem_info_gtt_used"] = std::to_string(6 * GiB) + "\n";
+    files["/sys/class/drm/card2/device/mem_info_gtt_used"] = std::to_string(2 * GiB) + "\n";
+    check("the cards' live GTT is not free", 36 * GiB);
+    files["/sys/class/drm/card1/device/mem_info_gtt_used"] = std::to_string(60 * GiB) + "\n";
+    check("more live GTT than room: nothing counted", 8 * GiB);
+    setenv("DS4_GPU_RECLAIM", "0", 1);
+    files.erase("/sys/class/drm/card1/device/mem_info_gtt_used");
+    check("DS4_GPU_RECLAIM=0: not counted", 8 * GiB);
+    unsetenv("DS4_GPU_RECLAIM");
     std::printf("RAM availability: %d fixture checks passed\n", checks);
 }
 '''
@@ -111,7 +130,7 @@ class RamAvailableTests(unittest.TestCase):
             self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
             run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-            self.assertIn("19 fixture checks passed", run.stdout)
+            self.assertIn("25 fixture checks passed", run.stdout)
 
 
 if __name__ == "__main__":

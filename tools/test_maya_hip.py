@@ -422,6 +422,10 @@ class HipSetupTests(unittest.TestCase):
         self.assertEqual(conf_for(True, cached=f"-g {managed}"), [f"-DCMAKE_HIP_FLAGS=-g {managed}"])   # (not twice)
         self.assertEqual(conf_for(False, cached=f"-g {managed}"), ["-DCMAKE_HIP_FLAGS=-g"])
         self.assertEqual(conf_for(False, cached="-g"), [])
+        inc = (self.rocm / "include").as_posix()                    # (a user's own -isystem below it stays whole)
+        self.assertEqual(conf_for(True, hipflags=f"-isystem {inc}/hipblaslt"),
+                         [f"-DCMAKE_HIP_FLAGS=-isystem {inc}/hipblaslt {managed}"])
+        self.assertEqual(conf_for(False, cached=f"-isystem {inc}2 {managed}"), [f"-DCMAKE_HIP_FLAGS=-isystem {inc}2"])
 
     def test_refresh_without_the_hip_compiler_stops(self):
         build = self.root / "build-hip"

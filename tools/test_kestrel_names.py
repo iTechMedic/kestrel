@@ -49,6 +49,7 @@ class KestrelNames(unittest.TestCase):
         self.assertEqual(N.lookup({"MAYA_PAR_MAX": "4"}, "KESTREL_PAR_MAX"), "4")
         self.assertEqual(N.lookup({"MAYA_PAR_MAX": "4", "KESTREL_PAR_MAX": "2"}, "KESTREL_PAR_MAX"), "4")
         self.assertIsNone(N.lookup({"KESTREL_PAR_MAX": "4"}, "PATH"))
+        self.assertEqual(N.lookup({"STRATA_PAR_MAX": "3", "KESTREL_PAR_MAX": "2"}, "MAYA_PAR_MAX"), "2")   # (KESTREL_ over STRATA_)
 
     def test_config_env_in(self):
         cfg = N.env_in({"env": {"KESTREL_DS4_HELPER_GB": "100", "KESTREL_DS4_DECODE_TRIM": "12",

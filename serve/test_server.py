@@ -2628,6 +2628,17 @@ class IdleUnload(unittest.TestCase):
         self.svc.ensure_engine()
         self.assertEqual((self.svc.engine_life(), self.svc.unloaded), ("running", False))
 
+    def test_a_context_reload_after_an_idle_unload_reads_as_running(self):
+        # (Kestrel) the Context size's reload starts the engine: its life is "running" after, not "unloaded"
+        self.assertEqual(self.svc.unload(), "unloaded")
+        self.engine.stop = self.engine.close
+        self.engine.set_context = lambda n: setattr(self.engine, "max_context", n)
+        self.svc.reload = {"state": "waiting", "from": CTX, "to": CTX // 2, "started": time.time(), "error": None}
+        self.svc._reload(CTX, CTX // 2)
+        self.assertEqual((self.svc.engine_life(), self.svc.unloaded, self.get("/health")["engine"]),
+                         ("running", False, "running"))
+        self.assertEqual([m["status"]["value"] for m in self.get("/v1/models")["data"]], ["loaded"])
+
     def test_a_move_the_table_does_not_list_is_printed_not_refused(self):
         with unittest.mock.patch("builtins.print") as out:
             self.svc._set_life("unloaded")
