@@ -4,7 +4,7 @@
 #   ./run-kestrel.sh RUN-NAME all        all 225
 #   ./run-kestrel.sh RUN-NAME check      2 exercises, to check the setup
 #   RESUME=1 ./run-kestrel.sh RUN-NAME   continue that run: finished exercises are kept, the rest run
-#   EFFORT=medium ./run-kestrel.sh ...   thinking level (default high)
+#   EFFORT=low ./run-kestrel.sh ...      thinking level (default high; DeepSeek: low, high or max - medium is high)
 # Needs OPENAI_API_BASE (Kestrel's address, e.g. http://192.168.1.20:8000/v1) and OPENAI_API_KEY (Kestrel's api_key,
 # or any text if it has none). The thinking cap is Kestrel's own "thinking_budget".
 # Results: tmp.benchmarks/<date>--RUN-NAME. Score: ./benchmark/benchmark.py --stats <that folder> (in the container).

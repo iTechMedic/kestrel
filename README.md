@@ -88,10 +88,11 @@ The quants Kestrel downloads are other people's work, measured by their makers a
 - **Hy4-Flash · Maya quants** pick it 88.5% (Maya-XS) to 96.6% (Maya-L) of the time, with a KL divergence of 0.16
   down to 0.012 - charts against Tencent's own GGUFs on the [model card](https://huggingface.co/peasantsmith/Hy4-Flash-Maya-GGUF).
 
-**Coding, measured with Kestrel:** DeepSeek-V4.1-Flash scored **84%** on
-[aider's polyglot benchmark](https://aider.chat/docs/leaderboards/) (42 of a fixed 50-exercise subset, passed within
-two tries), with the 2.25-bit EXL3 quant and Turbo on, on the PC in [How fast is it?](#how-fast-is-it). DeepSeek's best
-on aider's leaderboard is V3.2-Exp at 74.2%. The setup, what failed and how to run it yourself:
+**Coding, measured with Kestrel:** DeepSeek-V4.1-Flash scored **86%** at low thinking and **84%** at high on
+[aider's polyglot benchmark](https://aider.chat/docs/leaderboards/) (43 and 42 of a fixed 50-exercise subset, passed
+within two tries), with the 2.25-bit EXL3 quant and Turbo on, on the PC in [How fast is it?](#how-fast-is-it). The two
+levels scored the same within chance; low took about a fifth less time. DeepSeek's best on aider's leaderboard is
+V3.2-Exp at 74.2%. The setup, what failed and how to run it yourself:
 [bench/aider-polyglot](bench/aider-polyglot/README.md).
 
 More on each model's card on [Hugging Face](https://huggingface.co/peasantsmith). Each of Kestrel's own engine changes
