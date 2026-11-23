@@ -289,7 +289,7 @@ uint64_t ram_avail() {
 #if defined(_WIN32)
     return os::ram_avail();
 #endif
-    uint64_t avail = ~uint64_t{0}, total = 0;
+    uint64_t avail = ~uint64_t{0}, total = 0, gpu_reclaim = 0, held = 0;
     {
         std::istringstream mi(read_file("/proc/meminfo"));
         std::string k;
@@ -297,12 +297,26 @@ uint64_t ram_avail() {
         while (mi >> k >> kb) {
             if (k == "MemAvailable:") avail = kb << 10;
             else if (k == "MemTotal:") total = kb << 10;
+            else if (k == "GPUReclaim:") gpu_reclaim = kb << 10;
+            else if (k == "AnonPages:" || k == "Shmem:" || k == "SUnreclaim:" || k == "KernelStack:" ||
+                     k == "PageTables:")
+                held += kb << 10;
             mi.ignore(64, '\n');
         }
     }
     if (avail != ~uint64_t{0}) {
         const uint64_t ceiling = total != 0 ? total : ~uint64_t{0};
         avail += std::min(zfs_arc_reclaimable(), ceiling > avail ? ceiling - avail : 0);
+        // (Kestrel) The GPU drivers' page pool (TTM: amdgpu's freed GTT / system pages, /proc/meminfo's GPUReclaim on
+        // newer kernels) keeps what an engine that ended gave back - after a start with the 8060S helper's 100 GB pool,
+        // ~90 GB. The kernel's shrinker frees it under pressure (and the next GPU allocations reuse it), but
+        // MemAvailable leaves it out, so every start after the first saw ~20 GB and read no hot experts ahead. Counted
+        // as free here, capped by the memory MemAvailable leaves out less what processes and the kernel hold (the
+        // counter can read above the RAM itself). DS4_GPU_RECLAIM=0: not counted.
+        const char* gr = std::getenv("MAYA_DS4_GPU_RECLAIM") ? std::getenv("MAYA_DS4_GPU_RECLAIM")
+                                                             : std::getenv("DS4_GPU_RECLAIM");
+        if (gpu_reclaim > 0 && total > avail + held && !(gr != nullptr && std::atoi(gr) == 0))
+            avail += std::min(gpu_reclaim, total - avail - held);
     }
     std::string cg = read_file("/proc/self/cgroup");   // "0::/user.slice/..."
     const size_t at = cg.find("0::");
@@ -1395,7 +1409,9 @@ struct Model::Impl {
     // (tools/ds4/dspark_ref.py checks them against DeepSeek's checkpoint)
     bool sample_drafts = std::getenv("DS4_DSPARK_SAMPLE") != nullptr && std::atoi(std::getenv("DS4_DSPARK_SAMPLE")) != 0;
     float q_temp_scale = std::getenv("DS4_DSPARK_QTEMP") ? (float) std::atof(std::getenv("DS4_DSPARK_QTEMP")) : 1.0f;
-    int max_drafts = std::getenv("DS4_DSPARK_MAX") ? std::atoi(std::getenv("DS4_DSPARK_MAX")) : 0;
+    // (Kestrel: through ds4_env, so MAYA_DS4_DSPARK_MAX / KESTREL_DS4_DSPARK_MAX are read too - a config's
+    //  KESTREL_DS4_DSPARK_MAX was ignored before)
+    int max_drafts = ds4_env("DS4_DSPARK_MAX") ? std::atoi(ds4_env("DS4_DSPARK_MAX")) : 0;
     // DS4_DSPARK_LAZY=0: the drafter's head, markov steps and confidences on every row of its block (else only the
     // rows the round's cut can still keep - the same drafts and confidences, bit for bit)
     bool draft_lazy = !(std::getenv("DS4_DSPARK_LAZY") != nullptr && std::atoi(std::getenv("DS4_DSPARK_LAZY")) == 0);
