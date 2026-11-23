@@ -392,6 +392,37 @@ class HipSetupTests(unittest.TestCase):
                 maya.compile_engine_hip(pc, self.root / "llama", "source-sha", soft=True)
         self.assertIn("not started", stop.call_args.args[0])
 
+    def test_linux_hip_flags_keep_the_users(self):
+        # (Kestrel) the -isystem for a shadowed ROCm goes after the user's HIPFLAGS; with none shadowed CMAKE_HIP_FLAGS is
+        # left alone, unless the cache still holds the managed flag - then only that is taken out
+        pc = {"rocm": str(self.rocm), "archs": ["gfx1151"], "gpus": [{"index": 0}]}
+        managed = f"-isystem {(self.rocm / 'include').as_posix()}"
+
+        def conf_for(shadowed, hipflags=None, cached=None):
+            cache = maya.BUILD / "CMakeCache.txt"
+            if cached is None:
+                cache.unlink(missing_ok=True)
+            else:
+                maya.BUILD.mkdir(parents=True, exist_ok=True)
+                cache.write_text(f"CMAKE_GENERATOR:INTERNAL=Unix Makefiles\nCMAKE_HIP_FLAGS:STRING={cached}\n")
+            env = {"HIPFLAGS": hipflags} if hipflags is not None else {}
+            with patch.object(maya, "pick_cmake", return_value="cmake"), patch.object(maya, "WIN", False), \
+                    patch.object(maya, "hip_toolchain", return_value=(self.rocm, self.rocm / "llvm/bin/clang++",
+                                                                      self.rocm / "bin", env)), \
+                    patch.object(maya, "rocm_headers_shadowed", return_value=["hipblaslt"] if shadowed else []), \
+                    patch.object(maya, "cmake_steps", return_value="compiling") as build, \
+                    patch.object(maya, "fail", side_effect=SystemExit(1)):
+                with self.assertRaises(SystemExit):
+                    maya.compile_engine_hip(pc, self.root / "llama", "source-sha", soft=True)
+            return [x for x in build.call_args.args[0] if x.startswith("-DCMAKE_HIP_FLAGS=")]
+
+        self.assertEqual(conf_for(False), [])
+        self.assertEqual(conf_for(False, hipflags="-O3"), [])                       # (CMake takes HIPFLAGS itself)
+        self.assertEqual(conf_for(True, hipflags="-O3 -g"), [f"-DCMAKE_HIP_FLAGS=-O3 -g {managed}"])
+        self.assertEqual(conf_for(True, cached=f"-g {managed}"), [f"-DCMAKE_HIP_FLAGS=-g {managed}"])   # (not twice)
+        self.assertEqual(conf_for(False, cached=f"-g {managed}"), ["-DCMAKE_HIP_FLAGS=-g"])
+        self.assertEqual(conf_for(False, cached="-g"), [])
+
     def test_refresh_without_the_hip_compiler_stops(self):
         build = self.root / "build-hip"
         build.mkdir()

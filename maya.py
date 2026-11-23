@@ -3049,9 +3049,18 @@ def compile_engine_hip(pc: dict, llama: Path, src: str, soft=False, target: str 
              f"-DMAYA_GGML_DIR={llama.as_posix()}"]
     if not WIN and root == Path("/usr"):   # a distribution's ROCm: CMake's HIP check looks for hip-lang under this root
         conf.append(f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root.as_posix()}")
-    if not WIN:   # (Kestrel: two ROCm installs - this ROCm's headers before /usr/include's; empty: none shadowed)
+    if not WIN:   # (Kestrel: two ROCm installs - this ROCm's headers before /usr/include's)
+        # (the flag added to the user's own HIPFLAGS - a -DCMAKE_HIP_FLAGS replaces them - and, once no longer needed,
+        #  taken out of the cached flags again, the rest of them kept; otherwise CMAKE_HIP_FLAGS is left alone)
         shadowed = rocm_headers_shadowed(root)
-        conf.append("-DCMAKE_HIP_FLAGS=" + (f"-isystem {(root / 'include').as_posix()}" if shadowed else ""))
+        managed = f"-isystem {(root / 'include').as_posix()}"
+        cache = BUILD / "CMakeCache.txt"
+        m = re.search(r"^CMAKE_HIP_FLAGS:\w+=(.*)$", cache.read_text(errors="replace"), re.M) if cache.exists() else None
+        if shadowed:
+            base = (m.group(1) if m else env.get("HIPFLAGS", "")).replace(managed, "").split()
+            conf.append("-DCMAKE_HIP_FLAGS=" + " ".join(base + [managed]))
+        elif m and managed in m.group(1):
+            conf.append("-DCMAKE_HIP_FLAGS=" + " ".join(m.group(1).replace(managed, "").split()))
         if shadowed:
             ok(f"ROCm's headers from {root / 'include'}, ahead of another ROCm's in /usr/include ({', '.join(shadowed)})")
     jobs = max(1, min(4, (os.cpu_count() or 4) // 2))

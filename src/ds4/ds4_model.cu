@@ -312,11 +312,22 @@ uint64_t ram_avail() {
         // ~90 GB. The kernel's shrinker frees it under pressure (and the next GPU allocations reuse it), but
         // MemAvailable leaves it out, so every start after the first saw ~20 GB and read no hot experts ahead. Counted
         // as free here, capped by the memory MemAvailable leaves out less what processes and the kernel hold (the
-        // counter can read above the RAM itself). DS4_GPU_RECLAIM=0: not counted.
+        // counter can read above the RAM itself - 346 GB on a 125 GB PC) and less the GTT the amdgpu cards have in use
+        // now (another program's, or a running engine's: live, not in the pool). DS4_GPU_RECLAIM=0: not counted.
         const char* gr = std::getenv("MAYA_DS4_GPU_RECLAIM") ? std::getenv("MAYA_DS4_GPU_RECLAIM")
                                                              : std::getenv("DS4_GPU_RECLAIM");
-        if (gpu_reclaim > 0 && total > avail + held && !(gr != nullptr && std::atoi(gr) == 0))
-            avail += std::min(gpu_reclaim, total - avail - held);
+        if (gpu_reclaim > 0 && total > avail + held && !(gr != nullptr && std::atoi(gr) == 0)) {
+            uint64_t gtt_used = 0;
+            std::error_code ec;
+            for (const auto& ent : std::filesystem::directory_iterator("/sys/class/drm", ec)) {
+                const std::string n = ent.path().filename().string();
+                if (n.rfind("card", 0) != 0 || n.find('-') != std::string::npos) continue;   // (not card1-DP-1 etc.)
+                const std::string v = read_file(ent.path().string() + "/device/mem_info_gtt_used");
+                if (!v.empty()) gtt_used += std::strtoull(v.c_str(), nullptr, 10);
+            }
+            const uint64_t room = total - avail - held;
+            if (room > gtt_used) avail += std::min(gpu_reclaim, room - gtt_used);
+        }
     }
     std::string cg = read_file("/proc/self/cgroup");   // "0::/user.slice/..."
     const size_t at = cg.find("0::");
@@ -7405,6 +7416,7 @@ struct Model::Impl {
             if (c.lt_dlidx != nullptr) cudaFree(c.lt_dlidx);
             c.lt_lidx = nullptr;
             c.lt_dlidx = nullptr;
+            c.lt_lcap = 0;   // (Kestrel: a failure below must not leave the old size describing freed maps)
             if (cudaHostAlloc((void**) &c.lt_lidx, (size_t) nr * 4, cudaHostAllocDefault) != cudaSuccess ||
                 cudaMalloc((void**) &c.lt_dlidx, (size_t) nr * 4) != cudaSuccess) {
                 err = "DS4_PROMPT_LIGHT: its row map failed";
@@ -7460,8 +7472,13 @@ struct Model::Impl {
             for (size_t q = n_pool; q < lv.size(); ++q) fe.push_back(L0.host_list[(size_t) (lv[q] - L0.pv_n)]);
             c.lf_err.clear();
             const Layer* lp = &L0;
-            c.lf_job = std::async(std::launch::async,
-                                  [this, &c, lp, fe = std::move(fe), n_pool]() { return lf_run(c, *lp, fe, n_pool); });
+            try {   // (Kestrel: no thread for it - std::system_error - fails the prompt, not the engine)
+                c.lf_job = std::async(std::launch::async,
+                                      [this, &c, lp, fe = std::move(fe), n_pool]() { return lf_run(c, *lp, fe, n_pool); });
+            } catch (const std::exception& ex) {
+                err = std::string("DS4_PROMPT_LIGHT_FILES: its job did not start (") + ex.what() + ")";
+                ok = false;
+            }
         }
         return ok;
     }
@@ -7525,7 +7542,12 @@ struct Model::Impl {
     bool lf_join(Chunk& c, Streamer& S, std::string& err) {
         if (!c.lf_job.valid()) return true;
         const double w0 = now_ms();
-        bool ok = c.lf_job.get();
+        bool ok = false;
+        try {   // (Kestrel: an exception in the job - bad_alloc - fails the prompt, not the engine)
+            ok = c.lf_job.get();
+        } catch (const std::exception& ex) {
+            if (c.lf_err.empty()) c.lf_err = std::string("DS4_PROMPT_LIGHT_FILES: its job failed (") + ex.what() + ")";
+        }
         ok = ok && cudaEventSynchronize(c.lf_h) == cudaSuccess;
         S.lf_wait += now_ms() - w0;
         S.lf_read_ms += c.lf_read_ms;
