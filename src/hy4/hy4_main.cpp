@@ -1533,6 +1533,27 @@ void close_pipe(FILE* p) {
     pclose(p);
 #endif
 }
+// (Kestrel) the GTT the amdgpu cards have in use now, in bytes (Linux: sysfs, the DRM cards by number; elsewhere 0)
+uint64_t gpu_gtt_used() {
+    uint64_t sum = 0;
+#if defined(__linux__)
+    for (int i = 0; i < 64; ++i) {
+        std::ifstream f("/sys/class/drm/card" + std::to_string(i) + "/device/mem_info_gtt_used");
+        unsigned long long v = 0;
+        if (f >> v) sum += v;
+    }
+#endif
+    return sum;
+}
+// (Kestrel) A trial's process has ended - close_pipe waited for it - but the amdgpu driver frees its GPU memory
+// after that, in the background: the start's own load, sized right after the last trial, found the ~100 GB that
+// trial had used on a 128 GB Halo's 8060S neither free nor in the driver's pool, and nothing fit ("the model's dense
+// parts and caches do not fit").  Wait until the GTT in use is back to where it stood before the trial (1 GB of
+// slack), 60 s at most.
+void wait_gpu_released(uint64_t before) {
+    for (int i = 0; i < 240 && gpu_gtt_used() > before + (uint64_t{1} << 30); ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+}
 
 // how: "auto" or "on".  o.mtp / o.dfly2 set to the choice; child_args: this start's arguments without its drafting
 // and its mode (a trial's)
@@ -1621,6 +1642,7 @@ bool pick_drafting(hy4::Options& o, const std::string& how, const std::string& a
         std::string cmd = quote(self);
         for (const std::string& x : child_args) cmd += " " + quote(x);
         cmd += std::string(" --draft-trial ") + id[c] + (full ? ":full" : ":short");
+        const uint64_t gtt0 = gpu_gtt_used();
         if (FILE* p = open_pipe(cmd)) {   // (its stderr is this one's: its lines in the start's log)
             char line[512];
             int toks = 0;
@@ -1631,6 +1653,7 @@ bool pick_drafting(hy4::Options& o, const std::string& how, const std::string& a
                     tps[c] = std::max(0.0, v);
                 }
             close_pipe(p);
+            wait_gpu_released(gtt0);
             if (tps[c] > 0.0) {   // (the text read once: by the first trial that timed)
                 first = false;
                 ++timed;
