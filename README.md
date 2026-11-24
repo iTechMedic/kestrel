@@ -62,7 +62,7 @@ bits the experts keep). The setup recommends one for your PC; to pick one yourse
 | **[MiniMax-M3.1-Flash](https://huggingface.co/MiniMaxAI/MiniMax-M3.1-Flash)**<br><sub>MiniMax · [MiniMax Community License](LICENSE.minimax-m31) · 428 B, 23 B active · up to 1M context</sub> | Maya-XS · `minimax-maya-xs` | 93 GB | the whole model in a 128 GB PC's memory |
 | | Maya-S · `minimax-maya-s` | 122 GB | closer to the original |
 | **[Hy4-Flash](https://huggingface.co/tencent/Hy4-flash)**<br><sub>Tencent · [Tencent Hy License](LICENSE.hy4-flash) · 220 B · up to 1M context · reads pictures · NVIDIA, AMD on Linux</sub> | Maya-XS · `hy4-flash-maya-xs`<br>Maya-S · `hy4-flash-maya-s`<br>Maya-M · `hy4-flash-maya-m`<br>Maya-L · `hy4-flash-maya-l` | 44.8 GB<br>53.0 GB<br>68.4 GB<br>89.5 GB<br>each + one 63.4 GB n-gram table | PCs with about 56-64 GB (Maya-XS; cards from 8 GB), 68-80 GB (Maya-S), 80-96 GB (Maya-M) or 104-128 GB (Maya-L) of RAM + VRAM; Maya-S, Maya-M and Maya-L on cards from 12 GB; the n-gram table stays on the SSD |
-| **[Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)** (new)<br><sub>thinkingmachines · Apache 2.0 · 26 B, 8 of 128 experts a token · up to 1M context · reads pictures · experimental preview</sub> | UD-Q4_K_XL (unsloth) · `inkling-2-mini` | 17.6 GB | AMD on Linux: one RDNA 3 / 4 card with 24 GB or more, or a Ryzen AI Max, the whole model in memory ([speed on an R9700](#inkling-2-mini-on-a-radeon-ai-pro-r9700)). NVIDIA from the V100 / RTX 20 on, from 8 GB (the experts that don't fit stay in RAM), Linux and Windows, one or two GPUs |
+| **[Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)** (new)<br><sub>thinkingmachines · Apache 2.0 · 26 B, 8 of 128 experts a token · up to 1M context · reads pictures · experimental preview</sub> | UD-Q4_K_XL (unsloth) · `inkling-2-mini` | 17.6 GB | AMD on Linux: one RDNA 3 / 4 card from 12 GB (the experts that don't fit stay in RAM; 24 GB or more holds the whole model), or a Ryzen AI Max ([speed on an R9700](#inkling-2-mini-on-a-radeon-ai-pro-r9700)). NVIDIA from the V100 / RTX 20 on, from 8 GB (the experts that don't fit stay in RAM), Linux and Windows, one or two GPUs |
 
 **Which model fits your PC?** See [docs/MEMORY.md](docs/MEMORY.md) for each model's recommended memory (VRAM + RAM together).
 
@@ -129,21 +129,21 @@ A token is about ¾ of a word. The first answers after a start are the slowest w
 
 ### Inkling-2-Mini on a Radeon AI PRO R9700
 
-Measured 2026-11-22 on the same PC, on the R9700 alone: the whole model and its FP8 cache fit in its 32 GB, so the
-8060S is not used. Model: unsloth's UD-Q4_K_XL, 262,144-token context. Fresh prompts, 800-token answers, greedy,
-thinking off.
+Measured 2026-11-23 on the same PC, on the R9700 alone: the whole model and its FP8 cache fit in its 32 GB, so the
+8060S is not used. Model: unsloth's UD-Q4_K_XL, 262,144-token context, drafting on (`--drafting auto` chose the
+drafter together with the earlier text of the chat). Fresh prompts, 800-token answers, greedy, thinking off.
 
 | Prompt length | Prompt read (tokens/s) | Decode (tokens/s) |
 |---:|---:|---:|
-| 2.7K | 1,104 | 83.1 |
-| 9.8K | 1,163 | 81.4 |
-| 37.5K | 906 | 74.5 |
-| 117K | 554 | 60.3 |
-| 228K | 358 | 47.6 |
+| 2.7K | 1,138 | 101.7 |
+| 9.9K | 1,126 | 86.9 |
+| 37.6K | 890 | 72.3 |
+| 117K | 550 | 58.5 |
 
-Short answers decode at about 89 tokens/s. Text, thinking, tool calls and pictures were checked, and the answers were
-the same over restarts. It is a far smaller model than the ones above: much faster on one card, not as strong on hard
-tasks.
+Since 0.1.4 the drafter is a 0.4 GB GGUF that the setup downloads, and drafting keeps the answers the same as without
+it. On this PC it is faster on short and mid-length prompts and about even on long ones. In a live coding session,
+short answers came at 67-154 tokens/s and long ones at about 70. Text, thinking, tool calls and pictures were
+checked. It is a far smaller model than the ones above: much faster on one card, not as strong on hard tasks.
 
 To set it up on one GPU of a PC with several, name the card (`./kestrel.sh --check` shows the numbers):
 
