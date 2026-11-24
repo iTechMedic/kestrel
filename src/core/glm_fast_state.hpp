@@ -453,6 +453,15 @@ inline size_t expert_stride(size_t blob, int gu_type, int d_type) {
 // so the RAM-free measurements add it.  0 without ZFS and elsewhere.
 int64_t zfs_arc_reclaimable();
 
+// (Kestrel) Linux with amdgpu: the GPU drivers' page pool (TTM: freed GTT / system pages, /proc/meminfo's GPUReclaim on
+// newer kernels) that MemAvailable leaves out - after another engine on a Halo's 8060S ended, tens of GB.  The kernel's
+// shrinker frees it under pressure, so the RAM-free measurements add it, as maya-ds4's ram_avail and maya-hy4's
+// ram_available do: capped by the memory MemAvailable (`avail`, bytes) leaves out less what processes and the kernel
+// hold (the counter can read above the RAM itself) and less the GTT the amdgpu cards have in use now.  Measured on a
+// Ryzen AI Max (R9700 lead, 8060S helper) after a Hy4 run: MemAvailable 32-43 GB, the RAM tier 8-27 GB short of the
+// experts, 3-7 disk reads a token (25-31 of 70-80 ms).  MAYA_GLM_GPU_RECLAIM=0 / GLM_GPU_RECLAIM=0: not counted.
+int64_t gpu_pool_reclaimable(int64_t avail);
+
 // --dump-routing (Glm5Model::set_routing_dump): whether a trace file is open, and one route appended to it as
 // Strata's trace record (int32 layer, int32 k, then k int32 expert ids and k float weights), under a lock - the
 // decode's CPU-lane threads (one per half) and the prompt path write to the same file

@@ -117,7 +117,7 @@ int64_t avail_ram_bytes() {
             if (std::sscanf(line, "MemAvailable: %lld kB", &kb) == 1) break;
         std::fclose(f);
     }
-    return kb > 0 ? (int64_t) kb * 1024 + glmfast::zfs_arc_reclaimable() : 0;
+    return kb > 0 ? (int64_t) kb * 1024 + glmfast::zfs_arc_reclaimable() + glmfast::gpu_pool_reclaimable(kb * 1024) : 0;
 #endif
 }
 

@@ -589,6 +589,47 @@ static int win_arena_node(const void* p, size_t bytes) {
 }
 #endif
 
+int64_t glmfast::gpu_pool_reclaimable(int64_t avail) {
+#ifdef __linux__
+    const char* off = getenv("MAYA_GLM_GPU_RECLAIM") ? getenv("MAYA_GLM_GPU_RECLAIM") : getenv("GLM_GPU_RECLAIM");
+    if (avail <= 0 || (off != nullptr && std::atoi(off) == 0)) return 0;
+    long long total = 0, pool = 0, held = 0, huge_n = 0, huge_kb = 0;
+    if (FILE* f = std::fopen("/proc/meminfo", "r")) {
+        char line[256], k[64];
+        long long kb = 0;
+        while (std::fgets(line, sizeof line, f)) {   // (HugePages_Total has no unit: a count)
+            if (std::sscanf(line, "%63s %lld", k, &kb) != 2) continue;
+            if (std::strcmp(k, "MemTotal:") == 0) total = kb << 10;
+            else if (std::strcmp(k, "GPUReclaim:") == 0) pool = kb << 10;
+            else if (std::strcmp(k, "HugePages_Total:") == 0) huge_n = kb;
+            else if (std::strcmp(k, "Hugepagesize:") == 0) huge_kb = kb;
+            else if (std::strcmp(k, "AnonPages:") == 0 || std::strcmp(k, "Shmem:") == 0 ||
+                     std::strcmp(k, "SUnreclaim:") == 0 || std::strcmp(k, "KernelStack:") == 0 ||
+                     std::strcmp(k, "PageTables:") == 0 || std::strcmp(k, "Unevictable:") == 0)
+                held += kb << 10;
+        }
+        std::fclose(f);
+    }
+    held += (huge_n * huge_kb) << 10;   // (reserved huge pages: neither free nor anyone's anon)
+    if (pool <= 0 || total <= avail + held) return 0;
+    long long gtt_used = 0;
+    for (int i = 0; i < 64; ++i) {   // (the DRM cards by number; one that is not there reads as nothing)
+        char path[96];
+        std::snprintf(path, sizeof path, "/sys/class/drm/card%d/device/mem_info_gtt_used", i);
+        if (FILE* g = std::fopen(path, "r")) {
+            long long v = 0;
+            if (std::fscanf(g, "%lld", &v) == 1 && v > 0) gtt_used += v;
+            std::fclose(g);
+        }
+    }
+    const long long room = total - avail - held;
+    return room > gtt_used ? (int64_t) std::min(pool, room - gtt_used) : 0;
+#else
+    (void) avail;
+    return 0;
+#endif
+}
+
 int64_t glmfast::zfs_arc_reclaimable() {
 #ifdef __linux__
     FILE* f = std::fopen("/proc/spl/kstat/zfs/arcstats", "r");   // (rows "name type value" after two header lines)
@@ -624,7 +665,7 @@ static int64_t avail_ram_now() {
             if (std::sscanf(line, "MemAvailable: %lld kB", &kb) == 1) break;
         std::fclose(f);
     }
-    return kb > 0 ? (int64_t) kb * 1024 + glmfast::zfs_arc_reclaimable() : 0;
+    return kb > 0 ? (int64_t) kb * 1024 + glmfast::zfs_arc_reclaimable() + glmfast::gpu_pool_reclaimable(kb * 1024) : 0;
 #endif
 }
 
@@ -1452,7 +1493,8 @@ bool Glm5Model::fast_setup(std::string& err) {
                     if (std::sscanf(line, "MemAvailable: %lld kB", &avail_kb) == 1) break;
                 std::fclose(mf);
             }
-            if (avail_kb > 0) avail_kb += (long long) (glmfast::zfs_arc_reclaimable() >> 10);
+            if (avail_kb > 0)
+                avail_kb += (long long) ((glmfast::zfs_arc_reclaimable() + glmfast::gpu_pool_reclaimable(avail_kb * 1024)) >> 10);
             double head_gb = 16.0;
             if (const char* h = getenv("MAYA_GLM_RAM_HEADROOM_GB")) head_gb = std::max(0.0, std::atof(h));
             size_t expert_bytes = 0;
@@ -1993,6 +2035,12 @@ bool Glm5Model::fast_setup(std::string& err) {
                         avail_kb += arc >> 10;
                         std::fprintf(stderr, "glm fast: ZFS's ARC holds %.1f GB above its floor: counted as free RAM "
                                              "(it gives it back under pressure)\n", (double) arc / 1073741824.0);
+                    }
+                    if (const int64_t gp = glmfast::gpu_pool_reclaimable((int64_t) avail_kb * 1024); gp > 0) {
+                        avail_kb += gp >> 10;
+                        std::fprintf(stderr, "glm fast: the GPU driver's page pool holds %.1f GB: counted as free RAM "
+                                             "(it gives it back under pressure; MAYA_GLM_GPU_RECLAIM=0 does not count "
+                                             "it)\n", (double) gp / 1073741824.0);
                     }
 #endif
                     total = std::max<int64_t>(0, avail_kb * 1024 - head_b - unseen_pf);
