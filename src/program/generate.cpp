@@ -2299,8 +2299,10 @@ static int glm_pack_generate(const Options& o) {
                          (long long) p, (long long) full);
             return;
         }
-        // the prompt's snapshot (the prompt but its last token or its generation prompt) into a checkpoint first
-        if (ckpt_max > 0 && snap_tokens.size() >= 512 && snap_tokens.size() < prompt.size() &&
+        // the prompt's snapshot (the prompt but its last token or its generation prompt) into a checkpoint first -
+        // short prompts too: the same prompt again (a retry, a regenerated answer) took the snapshot back at once
+        // before (0.03 s), and found nothing to take back once the snapshot had moved on past the answer (1 s)
+        if (ckpt_max > 0 && !snap_tokens.empty() && snap_tokens.size() < prompt.size() &&
             std::equal(snap_tokens.begin(), snap_tokens.end(), prompt.begin())) {
             bool have = false;
             for (const auto& c : ckpts) have = have || c.tokens == snap_tokens;
