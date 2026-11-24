@@ -453,9 +453,20 @@ def loading(w: LoadWatch, width: int, names=None):
     note = Text("The engine reads the experts into RAM and VRAM: the PC can be slow until the model is ready.",
                 f"italic {MUTED}")
     rows = Table.grid(padding=(0, 2))
-    if getattr(w, "hy4", False) and not parts:
-        # (Kestrel) maya-hy4 tells no GPU's part while it loads: no share of GB and no GPU rows - the share of its
-        # drafting choices measured while it measures them, and each choice's speed and experts on the GPU
+
+    def gpu_rows():
+        t = Table.grid(padding=(0, 2))
+        for k in range(max(n, len(parts))):
+            done, whole = parts.get(k, (0.0, 0.0))
+            state = Text("waiting", FAINT) if k not in parts else \
+                Text.assemble(("✓ ", OK), (f"{fmt(whole, 1)} GB", INK), (" of experts", MUTED)) if done >= whole else \
+                Text.assemble(("experts ", MUTED), (f"{fmt(done, 1)} of {fmt(whole, 1)} GB", INK))
+            t.add_row(Text(gpu(k), INK if k in parts else MUTED), bar(done / whole if whole else 0.0, 24), state)
+        return t
+    if getattr(w, "hy4", False) and (not parts or getattr(w, "measuring", False)):
+        # (Kestrel) maya-hy4 measuring its drafting choices once (each trial a load of its own): the share of the
+        # choices measured, the GPU rows of the trial loading now (its "warming the expert tiers" lines), and each
+        # choice's speed and experts on the GPU; before its first GPU line, the time only
         for name, rate, on_gpu, of in getattr(w, "trials", []):
             rows.add_row(Text(name[:1].upper() + name[1:], INK),
                          Text("does not load here", MUTED) if rate is None else
@@ -465,15 +476,9 @@ def loading(w: LoadWatch, width: int, names=None):
         done = getattr(w, "choices", None)
         top = [head_of(done[0] / max(done[1], 1)), Text(""), bar(done[0] / max(done[1], 1), width)] if done else \
             [Group(*side[:3])]
-        return Group(*top, *((Text(""), rows) if rows.rows else ()), Text(""), note)
-    head = head_of(frac)
-    for k in range(max(n, len(parts))):
-        done, whole = parts.get(k, (0.0, 0.0))
-        state = Text("waiting", FAINT) if k not in parts else \
-            Text.assemble(("✓ ", OK), (f"{fmt(whole, 1)} GB", INK), (" of experts", MUTED)) if done >= whole else \
-            Text.assemble(("experts ", MUTED), (f"{fmt(done, 1)} of {fmt(whole, 1)} GB", INK))
-        rows.add_row(Text(gpu(k), INK if k in parts else MUTED), bar(done / whole if whole else 0.0, 24), state)
-    return Group(head, Text(""), bar(frac, width), Text(""), rows, Text(""), note)
+        return Group(*top, *((Text(""), gpu_rows()) if parts else ()), *((Text(""), rows) if rows.rows else ()),
+                     Text(""), note)
+    return Group(head_of(frac), Text(""), bar(frac, width), Text(""), gpu_rows(), Text(""), note)
 
 
 class Dashboard(VerticalScroll):

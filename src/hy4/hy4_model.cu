@@ -4198,10 +4198,37 @@ struct Model::Impl {
             for (int il = 0; il < g.n_layer; ++il) L[(size_t) il].il = il;
             std::vector<std::string> errs(G.size());
             std::vector<std::thread> th;
+            // (Kestrel) each GPU's routed experts said as they reach its VRAM, in the words of GLM's warm-up ("warming
+            // the expert tiers N% (x of y GB, t s)", then "tiers warm"): the loading box draws each GPU's part and the
+            // share from them (tools/setup_bridge.py WARMING / WARMED) - a line at the start, then one a second at most
+            auto res_bytes = [&](const Layer& l) {
+                return l.il < g.n_dense_lead ? 0.0
+                                             : (double) std::max(0, std::min(l.n_res, g.n_expert)) * (double) expert_bytes(l.il);
+            };
+            std::vector<double> warm_all(G.size(), 0.0);
+            for (const auto& l : L)
+                if (l.gpu >= 0 && (size_t) l.gpu < G.size()) warm_all[(size_t) l.gpu] += res_bytes(l);
             for (size_t gi = 0; gi < G.size(); ++gi)
                 th.emplace_back([&, gi] {
-                    for (auto& l : L)
-                        if (l.gpu == (int) gi && !load_layer(l, errs[gi])) return;
+                    const double t0 = now_s(), all = warm_all[gi];
+                    double done = 0.0, said = t0;
+                    int n = 0;
+                    if (all > 0)
+                        std::fprintf(stderr, "maya-hy4: CUDA%zu warming the expert tiers 0%% (0.0 of %.1f GB, 0 s)\n", gi,
+                                     all / 1e9);
+                    for (auto& l : L) {
+                        if (l.gpu != (int) gi) continue;
+                        if (!load_layer(l, errs[gi])) return;
+                        done += res_bytes(l);
+                        n += l.il < g.n_dense_lead ? 0 : std::max(0, std::min(l.n_res, g.n_expert));
+                        if (all > 0 && now_s() - said >= 1.0 && done < all) {
+                            said = now_s();
+                            std::fprintf(stderr, "maya-hy4: CUDA%zu warming the expert tiers %d%% (%.1f of %.1f GB, %.0f s)\n",
+                                         gi, (int) (100.0 * done / all), done / 1e9, all / 1e9, said - t0);
+                        }
+                    }
+                    if (all > 0)
+                        std::fprintf(stderr, "maya-hy4: CUDA%zu tiers warm: %d experts (%.1f GB)\n", gi, n, done / 1e9);
                 });
             for (auto& t : th) t.join();
             for (auto& e : errs)

@@ -18,11 +18,12 @@ from pathlib import Path
 
 TAIL = 40                                               # the output lines a summary keeps of a step that stopped
 # the GLM engine's start, in its log: each GPU's expert tiers warmed up in turn - "glm fast: CUDA2 warming the expert
-# tiers 40% (5.4 of 13.4 GB, 11 s)", then "glm fast: CUDA2 tiers warm: 1152 experts (13.4 GB) in 29 s"
-WARMING = re.compile(r"glm fast: (\S+?)(\d+) warming the expert tiers \d+% \(([\d.]+) of ([\d.]+) GB")
-WARMED = re.compile(r"glm fast: (\S+?)(\d+) tiers warm: \d+ experts \(([\d.]+) GB\)")
+# tiers 40% (5.4 of 13.4 GB, 11 s)", then "glm fast: CUDA2 tiers warm: 1152 experts (13.4 GB) in 29 s"; (Kestrel)
+# maya-hy4 says its routed experts' load in the same words ("maya-hy4: CUDA0 warming the expert tiers ...")
+WARMING = re.compile(r"(?:glm fast|maya-hy4): (\S+?)(\d+) warming the expert tiers \d+% \(([\d.]+) of ([\d.]+) GB")
+WARMED = re.compile(r"(?:glm fast|maya-hy4): (\S+?)(\d+) tiers warm: \d+ experts \(([\d.]+) GB\)")
 MEASURE_LEFT = re.compile(r"measuring this PC: \d+ of \d+ choices done in \d+ s - about (\d+) s more")
-# (Kestrel) maya-hy4 says nothing of each GPU's part while it loads; its first start's drafting trials say how each
+# (Kestrel) maya-hy4's first start's drafting trials (each a load of its own, its GPU lines too) say how each
 # choice did - "drafting trial: the MTP block 21.50 tokens/s (192 tokens; load 11 s; 1886 of 20992 routed experts in
 # VRAM, ...)" or "drafting trial: the DFly2 drafter does not load beside this start (...)" - and how many are done
 CHOICES = re.compile(r"measuring this PC: (\d+) of (\d+) choices done")
@@ -97,7 +98,7 @@ class LoadWatch:
         self.parts, self.t0 = {}, time.monotonic()      # the part's number -> [GB warm, GB in all]
         self.measuring = False                          # (maya-hy4's first start on a PC: its choices measured once -
         self.measure_left = None                        #  what, in plain words; the seconds left, at this PC's pace)
-        self.hy4 = False                                # (Kestrel) maya-hy4's log: no part of each GPU to show
+        self.hy4 = False                                # (Kestrel) maya-hy4's log: its drafting trials beside the GPUs
         self.choices = None                             # its drafting choices measured: (done, of)
         self.trials = []                                # each one's (name, tokens/s or None: did not load, experts
                                                         #  on the GPU, routed experts in all)

@@ -387,6 +387,28 @@ class Loading(unittest.TestCase):
         self.assertIn("2 choices", w.measuring)
         self.assertIn("more)", text(D.loading(w, 60)))
 
+    def test_hy4_gpu_rows_from_its_warming_lines(self):   # (Kestrel: maya-hy4 says its experts' load as GLM does)
+        w = self.watch(["maya-hy4: CUDA0 warming the expert tiers 0% (0.0 of 96.4 GB, 0 s)",
+                        "maya-hy4: CUDA0 warming the expert tiers 41% (39.5 of 96.4 GB, 27 s)"], gpus=(1,))
+        self.assertEqual(w.parts, {0: [39.5, 96.4]})
+        out = text(D.loading(w, 80))
+        for want in (D.big("41%")[0].rstrip(), "GPU 1", "39.5 of 96.4 GB", "Warming the experts on GPU 1"):
+            self.assertIn(want, out)
+        w = self.watch(["maya-hy4: CUDA0 warming the expert tiers 99% (95.8 of 96.4 GB, 61 s)",
+                        "maya-hy4: CUDA0 tiers warm: 20172 experts (96.4 GB)"], gpus=(1,))
+        self.assertEqual(w.fraction(), 1.0)
+        self.assertIn("almost ready", text(D.loading(w, 80)))
+        # (its drafting trials: each a load of its own - the trial's GPU row beside the choices measured)
+        w = self.watch(["maya-hy4: measuring this PC once, before the first answer: drafting (no drafting, the MTP "
+                        "block: a load and 3 short answers each) - on 56132 tokens of text",
+                        "maya-hy4: drafting trial: no drafting 16.06 tokens/s (192 tokens; load 61 s; 20992 of 20992 "
+                        "routed experts in VRAM, prompt chunk 4096)",
+                        "maya-hy4: measuring this PC: 1 of 2 choices done in 80 s - about 80 s more",
+                        "maya-hy4: CUDA0 warming the expert tiers 25% (24.1 of 96.4 GB, 15 s)"], gpus=(1,))
+        out = text(D.loading(w, 80))
+        for want in (D.big("50%")[0].rstrip(), "1 of 2 done", "No drafting", "16.1 tok/s", "GPU 1", "24.1 of 96.4 GB"):
+            self.assertIn(want, out)
+
 
 @unittest.skipIf(T is None, "Textual is not installed (./maya.sh --setup installs it)")
 class Start(unittest.IsolatedAsyncioTestCase):
