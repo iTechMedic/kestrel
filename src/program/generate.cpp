@@ -2289,9 +2289,10 @@ static int glm_pack_generate(const Options& o) {
     // reasoning) takes that checkpoint and reads what it read before.  MAYA_GLM_ANSWER_SNAP=0: off.
     const auto answer_snapshot = [&](const std::vector<int32_t>& prompt, const std::vector<int32_t>& emitted) {
         static const bool on = [] { const char* v = getenv("MAYA_GLM_ANSWER_SNAP"); return !v || std::atoi(v) != 0; }();
-        if (!on || !model.fast() || !cur_img_pos.empty() || emitted.empty() || model.seq_count() > 1 ||
+        if (!on || !model.fast() || emitted.empty() || model.seq_count() > 1 || model.ablating() ||
             getenv("MAYA_GLM_NO_REUSE") != nullptr)
             return;
+        const bool pics = !cur_img_pos.empty();
         const int64_t p = model.position();
         const int64_t full = (int64_t) (prompt.size() + emitted.size());
         if (p <= (int64_t) prompt.size() || p > full) {
@@ -2302,11 +2303,18 @@ static int glm_pack_generate(const Options& o) {
         // the prompt's snapshot (the prompt but its last token or its generation prompt) into a checkpoint first -
         // short prompts too: the same prompt again (a retry, a regenerated answer) took the snapshot back at once
         // before (0.03 s), and found nothing to take back once the snapshot had moved on past the answer (1 s)
-        if (ckpt_max > 0 && !snap_tokens.empty() && snap_tokens.size() < prompt.size() &&
+        if (!pics && ckpt_max > 0 && !snap_tokens.empty() && snap_tokens.size() < prompt.size() &&
             std::equal(snap_tokens.begin(), snap_tokens.end(), prompt.begin())) {
             bool have = false;
             for (const auto& c : ckpts) have = have || c.tokens == snap_tokens;
             if (!have) ckpt_keep(prompt, snap_tokens.size(), true);
+        }
+        // a prompt with pictures has no checkpoints (text only): its state goes to a slot instead, which keeps the
+        // pictures' fingerprint (a coding agent's screenshot rode along in every turn, and every turn read the last
+        // answer again: 19.9K tokens, 27 s).  No slot (off, or a prompt under MAYA_GLM_SLOT_MIN): the snapshot stays.
+        if (pics) {
+            if (!snap_in_slot) slot_put(" (the prompt's state, before its answer)");
+            if (!snap_in_slot) return;
         }
         if (!model.snapshot_save()) return;
         snap_tokens.assign(prompt.begin(), prompt.end());
