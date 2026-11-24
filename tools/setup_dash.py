@@ -439,7 +439,12 @@ def loading(w: LoadWatch, width: int, names=None):
             Text(f"{clock(took)} so far{left}", MUTED), Text("")]
     if frac is None:                                    # (no engine log: the time only)
         return Group(*side[:3])
-    lines = [Text.assemble(gradient(row, "bold"), "    ", s) for row, s in zip(big(f"{round(frac * 100)}%"), side)]
+    # the share in big on the left, the lines beside it in a column of their own: a long one (Hy4-Flash's measuring
+    # note) wraps within that column instead of back under the digits
+    head = Table.grid(padding=(0, 4))
+    head.add_column(no_wrap=True)
+    head.add_column()
+    head.add_row(Text("\n").join(gradient(row, "bold") for row in big(f"{round(frac * 100)}%")), Group(*side[:3]))
     rows = Table.grid(padding=(0, 2))
     for k in range(max(n, len(parts))):
         done, whole = parts.get(k, (0.0, 0.0))
@@ -447,7 +452,7 @@ def loading(w: LoadWatch, width: int, names=None):
             Text.assemble(("✓ ", OK), (f"{fmt(whole, 1)} GB", INK), (" of experts", MUTED)) if done >= whole else \
             Text.assemble(("experts ", MUTED), (f"{fmt(done, 1)} of {fmt(whole, 1)} GB", INK))
         rows.add_row(Text(gpu(k), INK if k in parts else MUTED), bar(done / whole if whole else 0.0, 24), state)
-    return Group(*lines, Text(""), bar(frac, width), Text(""), rows, Text(""),
+    return Group(head, Text(""), bar(frac, width), Text(""), rows, Text(""),
                  Text("The engine reads the experts into RAM and VRAM: the PC can be slow until the model is ready.",
                       f"italic {MUTED}"))
 
