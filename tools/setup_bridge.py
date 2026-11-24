@@ -22,6 +22,12 @@ TAIL = 40                                               # the output lines a sum
 WARMING = re.compile(r"glm fast: (\S+?)(\d+) warming the expert tiers \d+% \(([\d.]+) of ([\d.]+) GB")
 WARMED = re.compile(r"glm fast: (\S+?)(\d+) tiers warm: \d+ experts \(([\d.]+) GB\)")
 MEASURE_LEFT = re.compile(r"measuring this PC: \d+ of \d+ choices done in \d+ s - about (\d+) s more")
+# (Kestrel) maya-hy4 says nothing of each GPU's part while it loads; its first start's drafting trials say how each
+# choice did - "drafting trial: the MTP block 21.50 tokens/s (192 tokens; load 11 s; 1886 of 20992 routed experts in
+# VRAM, ...)" or "drafting trial: the DFly2 drafter does not load beside this start (...)" - and how many are done
+CHOICES = re.compile(r"measuring this PC: (\d+) of (\d+) choices done")
+TRIAL = re.compile(r"drafting trial: (.+?) ([\d.]+) tokens/s \(\d+ tokens; load \d+ s; (\d+) of (\d+) routed experts")
+TRIAL_NO = re.compile(r"drafting trial: (.+?) does not load beside this start")
 
 
 def measure_said(line: str) -> str:
@@ -91,6 +97,10 @@ class LoadWatch:
         self.parts, self.t0 = {}, time.monotonic()      # the part's number -> [GB warm, GB in all]
         self.measuring = False                          # (maya-hy4's first start on a PC: its choices measured once -
         self.measure_left = None                        #  what, in plain words; the seconds left, at this PC's pace)
+        self.hy4 = False                                # (Kestrel) maya-hy4's log: no part of each GPU to show
+        self.choices = None                             # its drafting choices measured: (done, of)
+        self.trials = []                                # each one's (name, tokens/s or None: did not load, experts
+                                                        #  on the GPU, routed experts in all)
 
     def read(self) -> None:
         """The log's new lines (on the screen's thread, once a second: a few KB)."""
@@ -103,16 +113,24 @@ class LoadWatch:
         cut = chunk.rfind(b"\n") + 1
         self.pos += cut
         for line in chunk[:cut].decode("utf-8", "replace").splitlines():
+            if line.startswith("maya-hy4"):
+                self.hy4 = True
+            if m := TRIAL.search(line):
+                self.trials.append((m.group(1), float(m.group(2)), int(m.group(3)), int(m.group(4))))
+            elif m := TRIAL_NO.search(line):
+                self.trials.append((m.group(1), None, 0, 0))
+            if m := CHOICES.search(line):
+                self.choices = (int(m.group(1)), int(m.group(2)))
             if m := WARMING.search(line):
                 self.parts[int(m.group(2))] = [float(m.group(3)), float(m.group(4))]
             elif m := WARMED.search(line):
                 self.parts[int(m.group(2))] = [float(m.group(3))] * 2
             elif "measuring this PC once, before the first answer" in line:
-                self.measuring, self.measure_left = measure_said(line), None
+                self.measuring, self.measure_left, self.choices = measure_said(line), None, None
             elif m := MEASURE_LEFT.search(line):
                 self.measure_left = int(m.group(1))
             elif "measured this PC once in" in line:
-                self.measuring, self.measure_left = False, None
+                self.measuring, self.measure_left, self.choices = False, None, None
 
     def total(self) -> tuple:
         """(the GB the start warms in all, whether it is known): each part's as the engine said; one not started yet

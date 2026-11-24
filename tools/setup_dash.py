@@ -422,8 +422,11 @@ def loading(w: LoadWatch, width: int, names=None):
     now = [k for k in sorted(parts) if parts[k][0] < parts[k][1]]   # (the GPU warming now; before it starts: the next)
     if getattr(w, "measuring", False):                  # (Hy4-Flash's first start on this PC, before it is ready)
         left = getattr(w, "measure_left", None)
+        done = getattr(w, "choices", None)
+        so_far = ", ".join(([f"{done[0]} of {done[1]} done"] if done else []) +
+                           ([f"about {clock(left)} more"] if left else []))
         what = (f"measuring this PC once, {w.measuring if isinstance(w.measuring, str) else 'its choices'}" +
-                (f" (about {clock(left)} more)" if left else "") + " - the next starts skip this")
+                (f" ({so_far})" if so_far else "") + " - the next starts skip this")
     elif not parts:
         what = "reading the model's weights"
     elif len(parts) >= n and not now:
@@ -441,20 +444,36 @@ def loading(w: LoadWatch, width: int, names=None):
         return Group(*side[:3])
     # the share in big on the left, the lines beside it in a column of their own: a long one (Hy4-Flash's measuring
     # note) wraps within that column instead of back under the digits
-    head = Table.grid(padding=(0, 4))
-    head.add_column(no_wrap=True)
-    head.add_column()
-    head.add_row(Text("\n").join(gradient(row, "bold") for row in big(f"{round(frac * 100)}%")), Group(*side[:3]))
+    def head_of(share):
+        head = Table.grid(padding=(0, 4))
+        head.add_column(no_wrap=True)
+        head.add_column()
+        head.add_row(Text("\n").join(gradient(row, "bold") for row in big(f"{round(share * 100)}%")), Group(*side[:3]))
+        return head
+    note = Text("The engine reads the experts into RAM and VRAM: the PC can be slow until the model is ready.",
+                f"italic {MUTED}")
     rows = Table.grid(padding=(0, 2))
+    if getattr(w, "hy4", False) and not parts:
+        # (Kestrel) maya-hy4 tells no GPU's part while it loads: no share of GB and no GPU rows - the share of its
+        # drafting choices measured while it measures them, and each choice's speed and experts on the GPU
+        for name, rate, on_gpu, of in getattr(w, "trials", []):
+            rows.add_row(Text(name[:1].upper() + name[1:], INK),
+                         Text("does not load here", MUTED) if rate is None else
+                         Text.assemble((f"{fmt(rate, 1)}", f"bold {INK}"), (" tok/s", MUTED)),
+                         Text("") if rate is None else
+                         Text.assemble((f"{on_gpu:,} of {of:,}", INK), (" experts on the GPU", MUTED)))
+        done = getattr(w, "choices", None)
+        top = [head_of(done[0] / max(done[1], 1)), Text(""), bar(done[0] / max(done[1], 1), width)] if done else \
+            [Group(*side[:3])]
+        return Group(*top, *((Text(""), rows) if rows.rows else ()), Text(""), note)
+    head = head_of(frac)
     for k in range(max(n, len(parts))):
         done, whole = parts.get(k, (0.0, 0.0))
         state = Text("waiting", FAINT) if k not in parts else \
             Text.assemble(("✓ ", OK), (f"{fmt(whole, 1)} GB", INK), (" of experts", MUTED)) if done >= whole else \
             Text.assemble(("experts ", MUTED), (f"{fmt(done, 1)} of {fmt(whole, 1)} GB", INK))
         rows.add_row(Text(gpu(k), INK if k in parts else MUTED), bar(done / whole if whole else 0.0, 24), state)
-    return Group(head, Text(""), bar(frac, width), Text(""), rows, Text(""),
-                 Text("The engine reads the experts into RAM and VRAM: the PC can be slow until the model is ready.",
-                      f"italic {MUTED}"))
+    return Group(head, Text(""), bar(frac, width), Text(""), rows, Text(""), note)
 
 
 class Dashboard(VerticalScroll):

@@ -343,6 +343,37 @@ class Loading(unittest.TestCase):
                         "rates remembered"], gpus=(0,))
         self.assertFalse(w.measuring)
         self.assertIn("Reading the model's weights", text(D.loading(w, 60)))
+
+    def test_hy4_shows_its_trials_not_gpu_rows(self):   # (Kestrel: maya-hy4 tells no GPU's part while it loads)
+        start = ("maya-hy4: measuring this PC once, before the first answer: drafting (no drafting, the MTP block, the "
+                 "DFly2 drafter: a load and 3 short answers each) - on 56202 tokens of text; remembered, the next "
+                 "starts skip it")
+        w = self.watch([start], gpus=(1,))
+        out = text(D.loading(w, 80))
+        self.assertIn("Measuring this PC once", out)
+        for gone in ("GPU 1", "waiting", D.big("0%")[0].rstrip()):  # (no GPU row, no share yet)
+            self.assertNotIn(gone, out)
+        w = self.watch([start,
+                        "maya-hy4: drafting trial: the MTP block 21.50 tokens/s (192 tokens; load 11 s; 1886 of 20992 "
+                        "routed experts in VRAM, prompt chunk 4096)",
+                        "maya-hy4: measuring this PC: 1 of 3 choices done in 54 s - about 89 s more",
+                        "maya-hy4: drafting trial: the DFly2 drafter does not load beside this start (out of memory)"],
+                       gpus=(1,))
+        self.assertEqual(w.choices, (1, 3))
+        out = text(D.loading(w, 80))
+        for want in (D.big("33%")[0].rstrip(), "1 of 3 done", "The MTP block", "21.5 tok/s", "1,886 of 20,992 experts on the GPU",
+                     "The DFly2 drafter", "does not load here"):
+            self.assertIn(want, out)
+        self.assertNotIn("waiting", out)
+        w = self.watch([start, "maya-hy4: measured this PC once in 259 s, before the first answer: drafting - the MTP "
+                               "block (no drafting 12.87, the MTP block 21.50, the DFly2 drafter 4.15 tokens/s)"],
+                       gpus=(1,))
+        out = text(D.loading(w, 80))
+        self.assertIn("Reading the model's weights", out)
+        self.assertNotIn(D.big("0%")[0].rstrip(), out)              # (measured: no share to show)
+        glm = self.watch(["glm fast: CUDA0 warming the expert tiers 50% (10.0 of 20.0 GB, 9 s)"], gpus=(0,))
+        self.assertFalse(glm.hy4)                                    # (GLM's start: its GPU rows as before)
+        self.assertIn("GPU 0", text(D.loading(glm, 80)))
         # (--drafting auto: the drafting trial in plain words with roughly how long, then the time left at the PC's pace)
         w = self.watch(["maya-hy4: measuring this PC once, before the first answer: drafting (no drafting, the MTP "
                         "block, the DFly2 drafter: a load and 3 short answers each) - on 56132 tokens of text; "

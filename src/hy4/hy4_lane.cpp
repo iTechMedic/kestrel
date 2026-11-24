@@ -572,6 +572,45 @@ void warm_experts(const CpuExperts& ex, const std::vector<int>& experts, const s
     }
 }
 
+#if !defined(_WIN32)
+// (Kestrel) The GPU drivers' page pool (TTM: amdgpu's freed GTT / system pages, /proc/meminfo's GPUReclaim on newer
+// kernels) keeps what an engine gave back - after a start on a Halo's 8060S, tens of GB. The kernel's shrinker frees
+// it under pressure (and the next GPU allocations reuse it), but MemAvailable leaves it out: each start - and each of
+// the first start's drafting trials, each a load of its own - saw less, and put fewer experts on the APU's GPU (8774,
+// then 1886, of 20992 on a 128 GB Halo). Counted as free, as maya-ds4's ram_avail does: capped by the memory
+// MemAvailable leaves out less what processes and the kernel hold (the counter can read above the RAM itself - 507
+// GB on a 125 GB PC) and less the GTT the amdgpu cards have in use now (live, not in the pool).
+// HY4_GPU_RECLAIM=0: not counted.
+static uint64_t gpu_pool_free(const std::string& meminfo, uint64_t avail) {
+    const char* off = std::getenv("MAYA_HY4_GPU_RECLAIM") ? std::getenv("MAYA_HY4_GPU_RECLAIM")
+                                                          : std::getenv("HY4_GPU_RECLAIM");
+    if (off != nullptr && std::atoi(off) == 0) return 0;
+    uint64_t total = 0, pool = 0, held = 0, huge_n = 0, huge_kb = 0;
+    std::istringstream mi(meminfo);
+    std::string k;
+    uint64_t kb = 0;
+    while (mi >> k >> kb) {   // (HugePages_Total has no unit: a count)
+        if (k == "MemTotal:") total = kb << 10;
+        else if (k == "GPUReclaim:") pool = kb << 10;
+        else if (k == "HugePages_Total:") huge_n = kb;
+        else if (k == "Hugepagesize:") huge_kb = kb;
+        else if (k == "AnonPages:" || k == "Shmem:" || k == "SUnreclaim:" || k == "KernelStack:" ||
+                 k == "PageTables:" || k == "Unevictable:")
+            held += kb << 10;
+        mi.ignore(64, '\n');
+    }
+    held += (huge_n * huge_kb) << 10;   // (reserved huge pages: neither free nor anyone's anon)
+    if (pool == 0 || total <= avail + held) return 0;
+    uint64_t gtt_used = 0;
+    for (int i = 0; i < 64; ++i) {   // (the DRM cards by number; one that is not there reads as empty)
+        const std::string v = read_file("/sys/class/drm/card" + std::to_string(i) + "/device/mem_info_gtt_used");
+        if (!v.empty()) gtt_used += std::strtoull(v.c_str(), nullptr, 10);
+    }
+    const uint64_t room = total - avail - held;
+    return room > gtt_used ? std::min(pool, room - gtt_used) : 0;
+}
+#endif
+
 uint64_t ram_available() {
 #if defined(_WIN32)
     MEMORYSTATUSEX s{};
@@ -580,7 +619,9 @@ uint64_t ram_available() {
 #else
     const std::string m = read_file("/proc/meminfo");
     const size_t at = m.find("MemAvailable:");
-    return at == std::string::npos ? 0 : (uint64_t) std::strtoull(m.c_str() + at + 13, nullptr, 10) * 1024;
+    if (at == std::string::npos) return 0;
+    const uint64_t avail = (uint64_t) std::strtoull(m.c_str() + at + 13, nullptr, 10) * 1024;
+    return avail + gpu_pool_free(m, avail);
 #endif
 }
 
