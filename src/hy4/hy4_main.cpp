@@ -1549,10 +1549,18 @@ uint64_t gpu_gtt_used() {
 // after that, in the background: the start's own load, sized right after the last trial, found the ~100 GB that
 // trial had used on a 128 GB Halo's 8060S neither free nor in the driver's pool, and nothing fit ("the model's dense
 // parts and caches do not fit").  Wait until the GTT in use is back to where it stood before the trial (1 GB of
-// slack), 60 s at most.
+// slack) and has stopped falling - `before` can hold an earlier engine's memory that was freed while the trial ran,
+// and the GTT then passes it while the trial's own is still being freed - 60 s at most.
 void wait_gpu_released(uint64_t before) {
-    for (int i = 0; i < 240 && gpu_gtt_used() > before + (uint64_t{1} << 30); ++i)
+    uint64_t last = gpu_gtt_used();
+    if (last == 0) return;   // (no amdgpu card, or not Linux)
+    for (int i = 0, flat = 0; i < 240; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        const uint64_t cur = gpu_gtt_used();
+        flat = last > cur && last - cur > (uint64_t{64} << 20) ? 0 : flat + 1;   // (falling: more than 64 MB a step)
+        last = cur;
+        if (cur <= before + (uint64_t{1} << 30) && flat >= 4) return;          // (back, and flat for 1 s)
+    }
 }
 
 // how: "auto" or "on".  o.mtp / o.dfly2 set to the choice; child_args: this start's arguments without its drafting

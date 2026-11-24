@@ -118,8 +118,10 @@ class LoadWatch:
                 self.hy4 = True
             if m := TRIAL.search(line):
                 self.trials.append((m.group(1), float(m.group(2)), int(m.group(3)), int(m.group(4))))
+                self.parts = {}                         # (the trial's load is over: the next load's GPU rows anew)
             elif m := TRIAL_NO.search(line):
                 self.trials.append((m.group(1), None, 0, 0))
+                self.parts = {}
             if m := CHOICES.search(line):
                 self.choices = (int(m.group(1)), int(m.group(2)))
             if m := WARMING.search(line):
@@ -130,8 +132,8 @@ class LoadWatch:
                 self.measuring, self.measure_left, self.choices = measure_said(line), None, None
             elif m := MEASURE_LEFT.search(line):
                 self.measure_left = int(m.group(1))
-            elif "measured this PC once in" in line:
-                self.measuring, self.measure_left, self.choices = False, None, None
+            elif "measured this PC once in" in line:   # (the trials done: the start's own load comes next)
+                self.measuring, self.measure_left, self.choices, self.parts = False, None, None, {}
 
     def total(self) -> tuple:
         """(the GB the start warms in all, whether it is known): each part's as the engine said; one not started yet

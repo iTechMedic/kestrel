@@ -408,6 +408,20 @@ class Loading(unittest.TestCase):
         out = text(D.loading(w, 80))
         for want in (D.big("50%")[0].rstrip(), "1 of 2 done", "No drafting", "16.1 tok/s", "GPU 1", "24.1 of 96.4 GB"):
             self.assertIn(want, out)
+        # (a trial's GPU rows end with it, and the trials' with the measuring: no finished load shown for the next)
+        trial = ["maya-hy4: measuring this PC once, before the first answer: drafting (no drafting, the MTP block: a "
+                 "load and 3 short answers each) - on 56132 tokens of text",
+                 "maya-hy4: CUDA0 warming the expert tiers 99% (95.8 of 96.4 GB, 61 s)",
+                 "maya-hy4: CUDA0 tiers warm: 20172 experts (96.4 GB)",
+                 "maya-hy4: drafting trial: no drafting 16.06 tokens/s (192 tokens; load 61 s; 20992 of 20992 routed "
+                 "experts in VRAM, prompt chunk 4096)"]
+        w = self.watch(trial, gpus=(1,))
+        self.assertEqual(w.parts, {})
+        self.assertNotIn("96.4 GB", text(D.loading(w, 80)))
+        w = self.watch(trial[:3] + ["maya-hy4: measured this PC once in 259 s, before the first answer: drafting - "
+                                    "no drafting (no drafting 16.06, the MTP block 12.00 tokens/s)"], gpus=(1,))
+        self.assertEqual(w.parts, {})
+        self.assertIn("Reading the model's weights", text(D.loading(w, 80)))
 
 
 @unittest.skipIf(T is None, "Textual is not installed (./maya.sh --setup installs it)")
