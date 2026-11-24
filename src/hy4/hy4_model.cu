@@ -3368,6 +3368,31 @@ struct Model::Impl {
             // an expert's three parts side by side in one blob (one copy a role; a pinned staging buffer a GPU would be
             // faster - the load reads the file at the page cache's pace anyway); the MTP block's BF16 ones rounded
             const size_t sgb = round ? (size_t) lat * ff * 2 : gb, sdb = round ? (size_t) ff * lat * 2 : db;
+            // (Kestrel) the layer's experts read into the page cache first, by several threads in large requests
+            // (mm3::os::populate_mapped: MADV_POPULATE_READ), before the one thread below copies them: that thread's
+            // page faults read the file a page or a read-ahead at a time, one at once - and where the page cache is
+            // tight the kernel stops reading ahead on a mapping that misses (4 KB reads): Maya-L on a 128 GB Halo
+            // loaded at 0.2-0.5 GB/s from an SSD that reads several GB/s.  HY4_LOAD_READERS=<n> threads (16 at
+            // most by default, the hardware threads' count), 0: off
+            {
+                int nt = (int) std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
+                if (const char* v = std::getenv("HY4_LOAD_READERS")) nt = std::max(0, std::atoi(v));
+                if (nt > 0 && l.n_res > 0) {
+                    std::atomic<int> next{0};
+                    const std::atomic<bool> stop{false};
+                    std::vector<std::thread> readers;
+                    for (int t = 0; t < std::min(nt, l.n_res); ++t)
+                        readers.emplace_back([&] {
+                            for (int i; (i = next.fetch_add(1)) < l.n_res;) {
+                                const size_t e = (size_t) res[(size_t) i];
+                                (void) mm3::os::populate_mapped(sg + e * sgb, sgb, stop);
+                                (void) mm3::os::populate_mapped(su + e * sgb, sgb, stop);
+                                (void) mm3::os::populate_mapped(sd + e * sdb, sdb, stop);
+                            }
+                        });
+                    for (std::thread& r : readers) r.join();
+                }
+            }
             std::vector<uint8_t> host(l.blob * 64);
             for (int s0 = 0; s0 < l.n_res; s0 += 64) {   // (slot s0 + i holds expert res[s0 + i])
                 const int ne = std::min(64, l.n_res - s0);
