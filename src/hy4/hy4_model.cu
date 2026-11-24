@@ -3380,14 +3380,25 @@ struct Model::Impl {
                 if (nt > 0 && l.n_res > 0) {
                     std::atomic<int> next{0};
                     const std::atomic<bool> stop{false};
+                    // (Linux: MADV_WILLNEED first - on a file mapping the kernel reads the range ahead in large
+                    //  requests (its fadvise path), where a fault's read-around is off once the mapping's faults
+                    //  miss (the page cache thrashing: 16 readers at 4 KB a read, 0.3 GB/s); then the populate finds
+                    //  the pages read or in flight)
+                    auto read_in = [&](const uint8_t* p, size_t n) {
+#if defined(__linux__)
+                        const uintptr_t pg = 4096, a = (uintptr_t) p / pg * pg;
+                        (void) ::madvise((void*) a, (size_t) ((uintptr_t) p + n - a), MADV_WILLNEED);
+#endif
+                        (void) mm3::os::populate_mapped(p, n, stop);
+                    };
                     std::vector<std::thread> readers;
                     for (int t = 0; t < std::min(nt, l.n_res); ++t)
                         readers.emplace_back([&] {
                             for (int i; (i = next.fetch_add(1)) < l.n_res;) {
                                 const size_t e = (size_t) res[(size_t) i];
-                                (void) mm3::os::populate_mapped(sg + e * sgb, sgb, stop);
-                                (void) mm3::os::populate_mapped(su + e * sgb, sgb, stop);
-                                (void) mm3::os::populate_mapped(sd + e * sdb, sdb, stop);
+                                read_in(sg + e * sgb, sgb);
+                                read_in(su + e * sgb, sgb);
+                                read_in(sd + e * sdb, sdb);
                             }
                         });
                     for (std::thread& r : readers) r.join();
