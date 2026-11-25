@@ -2213,8 +2213,8 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     metal = pc.get("backend") == "metal"
     mtp_where = ("" if metal else
                  " It drafts on this one GPU (an APU that holds the model in its memory)." if one_apu else
-                 " It drafts on the lead GPU only with the expert helper on (MAYA_GLM_EXPERT_HELPER with"
-                 " MAYA_GLM_MTP_DECODE=1); with the plain layer split, drafting is off." if helper else
+                 " It drafts on the lead GPU when the expert helper is on (MAYA_GLM_EXPERT_HELPER with"
+                 " MAYA_GLM_MTP_DECODE=1); the layer split a setup writes drafts through the split." if helper else
                  " On two GPUs or more; one GPU decodes without drafting.")
     rows = [("the model's MTP block", "default",
              "The model's own draft block guesses the next token, which the model then checks." + mtp_where),
