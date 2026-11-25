@@ -476,7 +476,8 @@ class DraftChoice(unittest.TestCase):
         helper = mtp_text({"backend": "hip", "gpus": [{"arch": "gfx1201", "name": "Radeon RX 9070 XT", "vram_gb": 16},
                                                       {"arch": "gfx1151", "name": "Radeon 8060S", "vram_gb": 108}]})
         self.assertIn("It drafts on the lead GPU", helper)
-        self.assertIn("only with the expert helper on (MAYA_GLM_EXPERT_HELPER", helper)   # the plain layer split
+        self.assertIn("when the expert helper is on (MAYA_GLM_EXPERT_HELPER", helper)
+        self.assertIn("the layer split a setup writes drafts through the split", helper)
         self.assertIn("one GPU decodes without drafting", mtp_text({"backend": "cuda", "archs": [86]}))
 
     def test_the_dflash_text_scopes_the_helper_numbers(self):
