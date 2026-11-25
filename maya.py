@@ -4806,8 +4806,12 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
             total_ram, _ = mem_gb()
             if WIN:     # Windows counts the GPU's carve-out apart from its RAM, and its desktop runs on that GPU
                 total_ram += sum(g.get("vram_gb", 0) for g in gpus)
-            hip_env.update({"MAYA_GLM_PREFILL_SUB": "1024",
-                            "MAYA_GLM_PREFILL_MB": "6144" if total_ram >= 96 else "4096"})
+            # (Kestrel) an EXL3 pack with the 6 GB budget: sub-batches of 4096 - its trunk's matrices are decoded
+            # once a sub-batch.  R9700 + 8060S, sc_2.60bpw, a 55K-token prompt: 648 -> 736-741 tok/s (8192 left the
+            # expert pool too little: 729).  Maya-S24 (GGUF) is slower at 4096 there (726 -> 686): 1024 stays.
+            big = total_ram >= 96
+            hip_env.update({"MAYA_GLM_PREFILL_SUB": "4096" if big and is_exl3(quant) else "1024",
+                            "MAYA_GLM_PREFILL_MB": "6144" if big else "4096"})
         elif min(g.get("vram_gb", 0) for g in gpus) >= 19.5:   # (an RX 7900 XT reports 19.98)
             hip_env.update({"MAYA_GLM_PREFILL_SUB": "1024", "MAYA_GLM_PREFILL_MB": "4096"})
         # Pass every available version per architecture: the engine's existing header guard selects the

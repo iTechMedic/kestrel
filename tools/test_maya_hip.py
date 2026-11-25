@@ -298,6 +298,13 @@ class HipSetupTests(unittest.TestCase):
                 self.assertEqual(env["MAYA_GLM_PREFILL_MB"], budget)
                 self.assertEqual(env["MAYA_HIPBLASLT_TUNING"], str(table))
                 self.assertNotIn("MAYA_GLM_POOL_GB", env)
+        # (Kestrel) an EXL3 quant with the 6 GB budget reads its prompts in sub-batches of 4096 (GGUF stays 1024)
+        for ram, sub in ((64, "1024"), (128, "4096")):
+            with self.subTest(exl3_ram=ram), patch.object(maya, "mem_gb", return_value=(ram, ram - 8)), \
+                    patch.object(maya, "is_exl3", return_value=True):
+                p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192,
+                                      self.root / "data", None)
+                self.assertEqual(maya.read_json(p)["env"]["MAYA_GLM_PREFILL_SUB"], sub)
                 self.assertNotIn("MAYA_GLM_RAM_GB", env)
                 self.assertNotIn("MAYA_GLM_PREFILL_CHUNK", env)
 
