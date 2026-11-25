@@ -59,12 +59,14 @@ class ModelChoice(unittest.TestCase):
     def test_downloads_chosen_by_hand_are_not_in_the_list(self):
         """v1.1.34: EXL3-sc_4.10bpw is not in the setup's list (maya.MODELS_BY_HAND) but stays a download: --model takes
         it, and a PC that has it set up lists it as its default (a setup again, --yes included, keeps the model)."""
-        self.assertEqual(maya.MODELS_BY_HAND, ("EXL3-sc_4.10bpw", "EXL3-sc_2.60bpw"))   # (Kestrel: sc_2.60)
+        self.assertEqual(maya.MODELS_BY_HAND, ("EXL3-sc_4.10bpw", "EXL3-sc_2.60bpw", "EXL3-sc_2.10bpw"))   # (Kestrel)
         self.assertIn("EXL3-sc_2.60bpw", maya.MODELS)
+        self.assertIn("EXL3-sc_2.10bpw", maya.MODELS)
         self.assertIn("EXL3-sc_4.10bpw", maya.MODELS)
         kind, quant, text = self.choose({})
         self.assertNotIn("sc_4.10", text)
         self.assertNotIn("sc_2.60", text)
+        self.assertNotIn("sc_2.10", text)
         self.assertIn("GLM-5.3-Flash · EXL3-4.05bpw: download", text)                # (the other EXL3 quants are still listed)
         self.assertIn("GLM-5.3-Flash · EXL3-3.05bpw: download", text)
         kind, quant, text = self.choose({"quant": "EXL3-sc_4.10bpw"})
