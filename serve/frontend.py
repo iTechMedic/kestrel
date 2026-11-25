@@ -538,7 +538,13 @@ _SAME = object()   # (LiteralMemo: nothing to mark in this text)
 class LiteralMemo:
     """mark_literals by text (MAYA_PROMPT_MEMO): _mark's answers remembered per text, so a re-sent history costs a dict
     lookup a string instead of every literal searched in every string - a pure function of the text and the tags, the
-    same result.  Two generations, cap characters a generation; the old one goes when the new one is full."""
+    same result.  Two generations, cap characters a generation; the old one goes when the new one is full.
+
+    No lock, and mark_literals does come from several threads at once (ThreadingHTTPServer): every cached answer is a
+    pure function of the text and these fixed tags, so the worst a race can do is lose one - two threads computing
+    the same key write the same value, and one writing into a generation another has just rotated out drops an entry
+    that is then simply recomputed.  The rotation itself is one atomic assignment, and a dict read sees the old or the
+    new entry, never a part of one."""
 
     def __init__(self, tags: dict[str, str], cap: int = 48_000_000):
         self.tags, self.own = tags, {t: v for t, v in tags.items() if t not in CALL_TAGS}

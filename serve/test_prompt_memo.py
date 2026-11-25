@@ -322,6 +322,50 @@ class SameIdsRealTokenizers(SameIds):
                     self.check_model(names[0], tok, served, glm_dsa_product.pack_is_glm_dsa(Path(d).parent))
 
 
+class MemoBuildRace(_MemoEnv, unittest.TestCase):
+    """The two first requests of a ThreadingHTTPServer at once (the reference PC, v1.1.81): OpenCode sends a new
+    session's message and a short side request together, so two threads reach render_ids' memo build at the same
+    time.  The second must not read _prompt_memo while the first is still constructing it."""
+
+    def test_two_first_requests_at_once(self):
+        import threading
+        import time
+        from unittest import mock
+        from serve import server as S
+        os.environ["MAYA_PROMPT_MEMO"] = "1"
+        req = {"messages": [{"role": "user", "content": "what does read_file do?"}], "tools": TOOLS}
+        m, t, kw = openai_to_messages(copy.deepcopy(req))
+        want = service("deepseek").render_ids(m, t, kw)     # (the single-threaded path, a service of its own)
+        real, svc = S.PromptMemo.__init__, service("deepseek")   # (the fresh service both threads build the memos on)
+        building = threading.Event()
+
+        def slow(self, tok, literals, keep=4):
+            building.set()          # (_lit_memo is published, this constructor is still running)
+            time.sleep(0.05)        # (the PromptMemo build the second thread used to read through)
+            real(self, tok, literals, keep)
+
+        barrier, out, errs = threading.Barrier(2), {}, []
+
+        def go(i):
+            barrier.wait()
+            if i == 1:
+                self.assertTrue(building.wait(2), "the first thread never reached the PromptMemo build")
+            try:
+                out[i] = svc.render_ids(m, t, kw)
+            except Exception as e:      # noqa: BLE001 - the report's AttributeError, and anything else
+                errs.append(e)
+
+        with mock.patch.object(S.PromptMemo, "__init__", slow):
+            threads = [threading.Thread(target=go, args=(i,)) for i in (0, 1)]
+            for th in threads:
+                th.start()
+            for th in threads:
+                th.join(timeout=10)
+                self.assertFalse(th.is_alive())
+        self.assertEqual(errs, [])
+        self.assertEqual([out.get(0), out.get(1)], [want, want])
+
+
 class LiteralMemoSame(unittest.TestCase):
     def test_the_same_as_mark_literals(self):
         for name, (_, pre, control, user) in MODELS.items():

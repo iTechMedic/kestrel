@@ -2690,6 +2690,9 @@ def prompt_memo_on() -> bool:
     return os.environ.get("MAYA_PROMPT_MEMO", "1") != "0"
 
 
+_MEMO_BUILD_LOCK = threading.Lock()   # the first two requests of a ThreadingHTTPServer can build the memos at once
+
+
 TURN_TRACE = os.environ.get("MAYA_TURN_TRACE", "") not in ("", "0")
 TURN = {}          # (MAYA_TURN_TRACE) this request's clock marks, CLOCK_MONOTONIC ms - the engine's trace line is on the same
 
@@ -3168,9 +3171,15 @@ class Service:
         memo = prompt_memo_on()
         turn_mark("render_start")
         if memo:
-            if getattr(self, "_lit_memo", None) is None:
-                self._lit_memo = LiteralMemo(self.literals)
-                self._prompt_memo = PromptMemo(self.tok, self.literals)
+            # (ThreadingHTTPServer: a new session's first two requests can reach this at the same instant, and the
+            # one behind must not read a memo the other is still constructing: build both under a lock, checked
+            # again inside it, and publish _prompt_memo first so that seeing _lit_memo always means finding it too)
+            if getattr(self, "_lit_memo", None) is None or getattr(self, "_prompt_memo", None) is None:
+                with _MEMO_BUILD_LOCK:
+                    if getattr(self, "_lit_memo", None) is None or getattr(self, "_prompt_memo", None) is None:
+                        lit, prompt = LiteralMemo(self.literals), PromptMemo(self.tok, self.literals)
+                        self._prompt_memo = prompt       # (a constructor that raises leaves the pair unbuilt)
+                        self._lit_memo = lit
             marked, marked_tools, changed = self._lit_memo.mark_literals(messages, tools)
         else:
             marked, marked_tools, changed = mark_literals(messages, tools, self.literals)
