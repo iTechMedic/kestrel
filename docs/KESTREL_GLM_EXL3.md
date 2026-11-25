@@ -72,8 +72,9 @@ as concise as with Turbo off.
   state goes on` or the exact token where a prompt left the answer. Measured: a turn after a tool call reads 11-17 new
   tokens (0.7-0.8 s); a 27K-token conversation with a screenshot, 13-16 (0.7-0.8 s). `MAYA_GLM_ANSWER_SNAP=0` turns
   it off.
-- **Conversations survive restarts** with `MAYA_GLM_SLOT_KEEP=1` (an existing engine feature, off by default): the
-  engine saves the conversation in the model when it ends and takes it back from disk at the next start. The first
+- **Conversations survive restarts** with `MAYA_GLM_SLOT_KEEP=1` (an existing engine feature; `maya.py --setup`
+  writes it into every GLM config now): the engine saves the conversation in the model when it ends and takes it
+  back from disk at the next start. The first
   turn after a restart (27K tokens, a screenshot): 3.4 s instead of ~37 s. Slots use up to `MAYA_GLM_SLOT_GB` (16) GB
   in `<pack>/slots`.
 - **EXL3 prompts in sub-batches of 4,096** (the setup, `maya.py`): an EXL3 quant on an APU system with 96 GB or more

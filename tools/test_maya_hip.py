@@ -275,34 +275,47 @@ class HipSetupTests(unittest.TestCase):
         self.a.gpu = 3
         self.assertEqual(maya.check_pc(self.a)["gpus"], [self.gpus[3]])
 
-    def test_apu_helper_mtp_drafts_adaptive_and_keeps_conversations(self):
-        # the discrete card with a Ryzen AI Max APU as its expert helper: an MTP config searches the draft length
-        # (measured there faster than one fixed length); DFlash2 loads no MTP block, so its config gets no such
-        # setting - and a setup again works the choice out anew.  Every GLM config keeps its conversations: the
-        # next request after an engine start reads only what is new
+    def test_apu_helper_mtp_drafts_at_one_and_keeps_conversations(self):
+        # the discrete card with a Ryzen AI Max APU as its expert helper: an MTP config drafts at one fixed length
+        # (measured there: the same short decode as MAYA_GLM_MTP_ADAPT=1, faster decode after a long read, and the
+        # answers stay the same on every start).  DFlash2 loads no MTP block, so its config gets no such setting,
+        # and neither does GLM-5.3 (glm-dsa), which has its own drafting's rules.  Every GLM config keeps its
+        # conversations: the next request after an engine start reads only what is new
         self.gpus.append({"index": 3, "arch": "gfx1151", "vendor": "amd", "name": "Radeon 8060S", "vram_gb": 112})
         self.a.gpu = None
         self.a.gpus = "1,3"
         pc = maya.check_pc(self.a)
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
         env = maya.read_json(p)["env"]
-        self.assertEqual(env["MAYA_GLM_MTP_ADAPT"], "1")
+        self.assertEqual(env["MAYA_GLM_MTP_FIXED"], "1")
+        self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
         self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
-        p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None,
-                              dflash=self.root / "dflash.gguf")
+        p = maya.write_config(self.a, pc, {}, self.root / "pack", "testd", 8192, self.root / "data", None,
+                              dflash=self.root / "dflash.gguf")   # (a config of its own: a fresh write)
         env = maya.read_json(p)["env"]
-        self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)   # (the setup's own: the earlier config's does not survive)
+        self.assertNotIn("MAYA_GLM_MTP_FIXED", env)   # the engine loads no MTP block with a drafter
+        self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
         self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
-        # the drafter declined with --env on a setup again: the user's MAYA_GLM_MTP_ADAPT=0 stays theirs
-        self.a.env = ["MAYA_GLM_MTP_ADAPT=0"]
+        # GLM-5.3 (glm-dsa) on the same layout: its drafting is the speed calibration's, not the setup's
+        pack53 = self.root / "pack53"
+        pack53.mkdir()
+        (pack53 / "index.txt").write_text("# strata pack index v3\n# glm-dsa: trunk 78, dense lead 3, experts 256, "
+                                          "mtp 1, indexer full 21\n")
+        env = maya.read_json(maya.write_config(self.a, pc, {}, pack53, "test53", 8192,
+                                               self.root / "data", None))["env"]
+        self.assertNotIn("MAYA_GLM_MTP_FIXED", env)
+        self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
+        # the length fixed by hand is the user's: an --env given now wins over the setup's
+        self.a.env = ["MAYA_GLM_MTP_FIXED=2"]
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
-        self.assertEqual(maya.read_json(p)["env"]["MAYA_GLM_MTP_ADAPT"], "0")
+        self.assertEqual(maya.read_json(p)["env"]["MAYA_GLM_MTP_FIXED"], "2")
 
     def test_one_gpu_config_drafts_as_before_and_keeps_conversations(self):
         pc = maya.check_pc(self.a)   # one discrete card: no helper layout, drafting as before
         env = maya.read_json(maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192,
                                                self.root / "data", None))["env"]
         self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
+        self.assertNotIn("MAYA_GLM_MTP_FIXED", env)
         self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
 
     def test_strix_halo_defaults_use_system_ram_not_vram(self):

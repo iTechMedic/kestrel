@@ -58,5 +58,5 @@ attention on the lead GPU**. At 55K the last (tail) chunk is nearly pure attenti
 On this pairing the scheduling is at its ceiling: prefill waits on the lead's attention kernels (DSA index pass
 ~3.2x a KDA layer, both far above the expert work beside them), and decode at 44-45 tok/s runs on the tuned
 DFlash2 path. The only levers above ~10 % left are kernel-level on gfx1201 (the DSA/KDA prefill attention
-themselves - upstream territory), or the quality-trade knobs already tuned (Turbo: +3 % read / +16 % decode at
-long context on this box, at some quality cost).
+themselves - kernel work), or the quality-trade knobs already tuned (Turbo: measured +21 % decode after a 13.7K
+read and +27 % after 55K, sc_2.10 with DFlash2, at some quality cost).

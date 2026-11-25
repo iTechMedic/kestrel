@@ -2195,8 +2195,9 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     8060S), where it is offered too.  So do NVIDIA
     GPUs before sm_80 (RTX 30 / A100): on Tesla V100s DFlash2 decoded slower than the MTP block (one GPU and two).  A
     DFlash2 answer is then checked on this PC by the speed calibration (speed_calibration): it stays only where it is
-    faster.  Declining - or a session that cannot ask - keeps MTP (write_config then lets the draft length adapt on
-    the helper layout).  The drafter's license is shown with the question, never only after the download.  On Metal
+    faster.  Declining - or a session that cannot ask - keeps MTP (write_config fixes the draft length at 1 for a
+    GLM-5.3-Flash config on the helper layout: measured there faster than letting it search).  The drafter's
+    license is shown with the question, never only after the download.  On Metal
     both are exact and neither is measured: MTP is the default, the choice is yours."""
     if getattr(a, "draft", None):
         return a.draft
@@ -4959,11 +4960,6 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
         gpus = pc["gpus"]
         if len(gpus) == 1:
             hip_env["MAYA_GLM_SPLIT"] = "0"   # two or more cards: the engine picks the split (and drafts with MTP)
-        # an APU expert helper beside the lead card, drafting with the MTP block: the length searches as the answers
-        # come (measured on the reference PC: faster there than one fixed length).  With DFlash2 the engine loads no
-        # MTP block, so it needs no such setting
-        if dflash is None and hip_helper_layout(pc):
-            hip_env["MAYA_GLM_MTP_ADAPT"] = "1"
         # GLM-5.3 on one APU: one-GPU drafting until the speed calibration measures it (g53_drafting_default)
         drafting = None if dflash is not None else g53_drafting_default(pc, pack, ctx, {**hip_env, **env})
         if drafting is not None:
@@ -5016,9 +5012,19 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
     # given now wins
     own = set(GLM_SETUP_ENV) | set(CAL.KEYS)
     forced, env = env, {**{k: v for k, v in (old_cfg.get("env") or {}).items() if N.shown(str(k)) not in own}, **env}
+    # the MTP block beside an APU expert helper drafts at one fixed length of 1: measured on the reference PC the
+    # same short decode as MAYA_GLM_MTP_ADAPT=1, a faster decode after a long read (28-30 against 25-27 tok/s) and
+    # the same answers on every start.  Not for GLM-5.3 (glm-dsa), which drafts by its own rules, and not beside a
+    # DFlash2 drafter, which loads no MTP block.  A length set by hand - in the config before or with --env - is
+    # the user's, and so is the one the NVIDIA calibration learned (installer.glm_draft_length)
+    if dflash is None and not dsa and hip_helper_layout(pc):
+        env.setdefault("MAYA_GLM_MTP_FIXED", "1")
     # kept conversations outlive the engine (llama-swap and the like: the next request reads only what is new, not
     # the whole conversation again); one set by hand - to 0 too - is the user's, and an --env given now wins
     env.setdefault("MAYA_GLM_SLOT_KEEP", "1")
+    if str(env.get("MAYA_GLM_SLOT_KEEP")) == "1":
+        ok("conversations are kept on disk between starts: up to 16 GB of slots in the pack's folder, 7 days "
+           "(MAYA_GLM_SLOT_GB, MAYA_GLM_SLOT_DAYS)")
     if env:
         cfg["env"] = env
     # the server's own settings from the config before (the address it listens on, its API key, ...): kept, as the
