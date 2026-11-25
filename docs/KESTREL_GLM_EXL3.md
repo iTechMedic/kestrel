@@ -5,6 +5,95 @@ each change bought, what did not help and why. The PC and its setup are in [KEST
 an R9700 (32 GB, `gfx1201`) on OCuLink leads, and the Ryzen AI MAX+ 395's Radeon 8060S (`gfx1151`, 128 GB of unified
 memory) is the expert helper. All numbers come from the scripts in [bench/kestrel-glm](../bench/kestrel-glm/).
 
+## Use turboderp's EXL3 weights
+
+Beside Maya's own GGUFs, Kestrel runs **turboderp's self-calibrated EXL3 quants** of GLM-5.3-Flash
+([huggingface.co/turboderp/GLM-5.3-Flash-exl3](https://huggingface.co/turboderp/GLM-5.3-Flash-exl3), the branches
+`sc_2.60bpw` and `sc_2.10bpw`). EXL3 is exllamav3's trellis format: the engine reads these weights in place from
+their safetensors files, nothing is re-quantized. What the weights themselves may be used for: the `LICENSE` file
+in that repo, which comes down with them - read it there.
+
+### Getting them
+
+The setup's model menu does not offer these two, but Kestrel supports them.
+
+**Let the setup download one**: name it and setup fetches it at the revision it was measured with, every downloaded
+file checked against its published sha256. Linux:
+
+```sh
+./kestrel.sh --setup --model EXL3-sc_2.60bpw
+```
+
+Windows: `START-KESTREL.bat --setup --model EXL3-sc_2.60bpw`. For `sc_2.10` name `EXL3-sc_2.10bpw`. The setup shows
+the source, the size and the exact resumable download commands first, and asks before it starts.
+
+**Or download them yourself** with Hugging Face's own tool, at the revision Kestrel pins -
+`24781209f2862a939cc21e01d256c943bd1a58a3` for `sc_2.60bpw`, `8d2eca0ed5b695108249308bcdc2af0636d5045f` for
+`sc_2.10bpw` - into the setup's models folder, then run the same setup command:
+
+```sh
+hf download turboderp/GLM-5.3-Flash-exl3 --revision 24781209f2862a939cc21e01d256c943bd1a58a3 \
+    --local-dir <models>/EXL3-sc_2.60bpw
+```
+
+(`<models>`: the models folder the setup names on screen; `--models-dir` moves it.) Checked on the reference PC:
+the setup finds the files there, keeps every one whose size matches the pinned revision's, and takes down only
+what is missing or incomplete - nothing already whole is fetched again. A different revision does not pass: its
+files have other sizes, and the setup fetches the pinned ones instead; a file the setup downloads that fails its
+sha256 check is removed and fetched again. Stay at the pinned revision: the speeds below hold for those files.
+
+### Which one to choose
+
+| | **sc_2.60bpw** | **sc_2.10bpw** | Maya-S24 (GGUF) |
+| --- | ---: | ---: | ---: |
+| download | 109 GB | 88.3 GB | 94.7 GB |
+| memory: the model with a 32K-token cache, kept resident | ~111 GB | ~90 GB | ~97 GB |
+| turboderp's KL divergence against the full model (lower is closer) | **0.093** | 0.157 | - |
+| short answers | 39.9 tok/s | **44.7 tok/s** | 41.0 tok/s |
+| decode after a 55K-token prompt | 28.4 tok/s | 28.5 tok/s | 27.4 tok/s |
+| 20-task coding test | 18/20 | 19/20 | 18/20 |
+
+The EXL3 rows run Turbo off with the DFlash2 drafter, Maya-S24 Turbo off with its own MTP block - on the PC this
+file opens with. The memory line is the setup's own sizing for keeping the whole model without reading experts
+from the SSD: a 128 GB PC covers sc_2.60.
+
+- **sc_2.60 for long agent sessions**: after a long prompt it answers as fast as sc_2.10 (attention over the
+  conversation dominates the decode and does not depend on the quant), and it is the closer one to the full model.
+- **sc_2.10 when short chats should be fast or memory is tight**: 12% faster on short answers, 21 GB less to keep.
+- **Maya-S24** is the menu default and the comparison row: a GGUF of its own, with its own numbers
+  ([MAYA-S24](../bench/results/MAYA-S24.md)).
+- The coding test cannot tell the quants apart: 17-19 of 20 is one result at this test's resolution (why, below).
+
+### Best settings
+
+All measured on one PC (an R9700 and a Ryzen AI MAX+ 395, 128 GB of RAM, Linux); other hardware can differ.
+
+The setup writes most of it by itself for a GLM config on this layout:
+
+- `--expert-cache auto`, `--prefill auto`, `--kv-streaming on` and the shipped `--expert-profile`
+  (`data/expert-profile-glm.bin` - the model's routing, right for any GLM quant);
+- `MAYA_GLM_PARALLEL_LOAD=0`, `MAYA_GLM_RESERVE_MB=1024` with `MAYA_VRAM_RESERVE_SETUP_MB=1024`,
+  `MAYA_GLM_RAM_HEADROOM_GB=16`, and `MAYA_HIPBLASLT_TUNING` on the shipped tables for both cards;
+- `MAYA_GLM_PREFILL_SUB=4096` and `MAYA_GLM_PREFILL_MB=6144` (an EXL3 quant on an APU system with 96 GB or more);
+- `MAYA_GLM_SLOT_KEEP=1`: conversations are kept on disk between starts (`MAYA_GLM_SLOT_GB` and
+  `MAYA_GLM_SLOT_DAYS` fit its budget);
+- `MAYA_GLM_MTP_FIXED=1` on an MTP config, so every start drafts at one fixed length (a `--dflash` config loads
+  no MTP block and gets none);
+- both GPUs in `"gpu"`, the faster card first; keep it that way when you edit the list by hand - with the 8060S
+  first this PC read prompts at 156 tok/s instead of 540-700.
+
+What you choose or set yourself:
+
+- **the expert helper**: what a plain two-GPU config does is split the layers; all the numbers here run the 8060S
+  as the R9700's helper instead - `MAYA_GLM_EXPERT_HELPER=1`, `MAYA_GLM_HELPER_EXL3=1` (the helper reads the EXL3
+  experts) and `MAYA_GLM_SPLIT=0`;
+- **drafting**: DFlash2 (`--draft dflash2`) is the fastest - its license is CC BY-NC-ND 4.0, non-commercial use
+  only; without it draft with the model's own MTP block: the setup's `MAYA_GLM_MTP_FIXED=1` plus
+  `MAYA_GLM_MTP_DECODE=1`, which turns MTP drafting on for a discrete lead card beside a helper (it does not
+  turn itself on there);
+- **Turbo**: `MAYA_GLM_RESIDENT_TOPK` unset means all 8 experts answer, the quality choice above; Turbo 4
+  (`MAYA_GLM_RESIDENT_TOPK=4`) decodes faster and that is the quality trade.
+
 ## Recommended setups
 
 | Use | Quant | Turbo | Drafting | Short answers | After a 55K prompt |
@@ -18,7 +107,7 @@ Both EXL3 quants are by-hand downloads (`--model EXL3-sc_2.60bpw` or `EXL3-sc_2.
 run at the same speed (see [Why the smaller quant only helps short answers](#why-the-smaller-quant-only-helps-short-answers)),
 so sc_2.60's better accuracy is nearly free where it matters most.
 
-The engine settings these setups share (on top of what the setup writes for two AMD GPUs):
+The engine settings these setups share (which lines a fresh setup writes by itself: [Best settings](#best-settings)):
 
 ```
 "args":  ... "--dflash", "<models>/GLM-5.3-Flash-DFlash2/GLM-5.3-Flash-DFlash2-Q4_K_M.gguf"
@@ -29,7 +118,9 @@ The engine settings these setups share (on top of what the setup writes for two 
 ```
 
 **The DFlash2 drafter's license is CC BY-NC-ND 4.0: non-commercial use only.** Without it, drop `--dflash` and set
-`MAYA_GLM_MTP_DECODE=1` and `MAYA_GLM_MTP_ADAPT=1` (the MTP rows below).
+`MAYA_GLM_MTP_DECODE=1` with `MAYA_GLM_MTP_FIXED=1` (the MTP rows below): measured here, one fixed length drafts
+the same short decode as the `MAYA_GLM_MTP_ADAPT=1` search, 28-30 against 25-27 tok/s after a long prompt, and the
+same answers on every run - the setup writes it there now.
 
 ## Every measurement
 

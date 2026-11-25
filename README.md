@@ -76,6 +76,12 @@ with MTP drafting (run on NVIDIA RTX 30 / A100 and newer, Linux; with pictures: 
 [its settings](docs/SETTINGS.md#hy4-flash)). **Each model's files, drafters, pictures and options:
 [docs/MODELS.md](docs/MODELS.md).**
 
+**turboderp's self-calibrated EXL3 weights of GLM-5.3-Flash** (`sc_2.60bpw`, `sc_2.10bpw`) are supported but not
+in the setup's menu: name one and the setup downloads it (`./kestrel.sh --setup --model EXL3-sc_2.60bpw`). Best
+for long agent sessions on a discrete card + Ryzen AI Max layout: after a long prompt both answer at the same
+speed, and sc_2.60 is the closer one to the full model. [What they are, how to get them and the settings we
+measured](docs/KESTREL_GLM_EXL3.md#use-turboderps-exl3-weights).
+
 ## Quality
 
 The quants Kestrel downloads are other people's work, measured by their makers against the original models:
