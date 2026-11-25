@@ -2196,7 +2196,8 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     GPUs before sm_80 (RTX 30 / A100): on Tesla V100s DFlash2 decoded slower than the MTP block (one GPU and two).  A
     DFlash2 answer is then checked on this PC by the speed calibration (speed_calibration): it stays only where it is
     faster.  Declining - or a session that cannot ask - keeps MTP (write_config fixes the draft length at 1 for a
-    GLM-5.3-Flash config on the helper layout: measured there faster than letting it search).  The drafter's
+    GLM-5.3-Flash MTP config once its expert helper stands in it: measured there faster than letting it search).
+    The drafter's
     license is shown with the question, never only after the download.  On Metal
     both are exact and neither is measured: MTP is the default, the choice is yours."""
     if getattr(a, "draft", None):
@@ -2212,7 +2213,8 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     metal = pc.get("backend") == "metal"
     mtp_where = ("" if metal else
                  " It drafts on this one GPU (an APU that holds the model in its memory)." if one_apu else
-                 " It drafts on the lead GPU, beside the APU helper's experts." if helper else
+                 " It drafts on the lead GPU only with the expert helper on (MAYA_GLM_EXPERT_HELPER with"
+                 " MAYA_GLM_MTP_DECODE=1); with the plain layer split, drafting is off." if helper else
                  " On two GPUs or more; one GPU decodes without drafting.")
     rows = [("the model's MTP block", "default",
              "The model's own draft block guesses the next token, which the model then checks." + mtp_where),
@@ -2221,7 +2223,7 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
              + (", so every token is the model's own pick. Not measured on a Mac: which one is faster is yours to try. " if metal else
              ": every token is the model's own pick, faster. Maya-L: +44% on nine GPUs and +12% on two against the MTP block, "
              + "+19% on one RTX 3090"
-             + (", +16-20% with a discrete AMD card and this APU helper" if helper else "")
+             + (", +16-20% with the expert helper on (MAYA_GLM_EXPERT_HELPER)" if helper else "")
              + ". A speed "
              "calibration then measures it against the MTP block on this PC (5-20 minutes) and keeps it only if it "
              "is faster here. "))]
@@ -5115,11 +5117,14 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
     forced, env = env, {**{k: v for k, v in (old_cfg.get("env") or {}).items() if N.shown(str(k)) not in own}, **env}
     # the MTP block beside an APU expert helper drafts at one fixed length of 1: measured on the reference PC the
     # same short decode as MAYA_GLM_MTP_ADAPT=1, a faster decode after a long read (28-30 against 25-27 tok/s) and
-    # the same answers on every start.  Not for GLM-5.3 (glm-dsa), which drafts by its own rules, and not beside a
-    # DFlash2 drafter, which loads no MTP block.  A length set by hand - in the config before or with --env - is
+    # the same answers on every start.  Only for a config that runs the helper (MAYA_GLM_EXPERT_HELPER, the helper's
+    # GPU index: kept from the config before or given with --env) - a fresh setup's two GPUs split the layers, and
+    # length 1 was never measured there.  Not for GLM-5.3 (glm-dsa), which drafts by its own rules, and not beside
+    # a DFlash2 drafter, which loads no MTP block.  A length set by hand - in the config before or with --env - is
     # the user's, and so is the one the NVIDIA calibration learned (installer.glm_draft_length); a config that
     # searches its length (MAYA_GLM_MTP_ADAPT, kept from the config before) keeps searching
-    if dflash is None and not dsa and hip_helper_layout(pc) and "MAYA_GLM_MTP_ADAPT" not in env:
+    if (dflash is None and not dsa and hip_helper_layout(pc) and "MAYA_GLM_MTP_ADAPT" not in env
+            and N.lookup(env, "MAYA_GLM_EXPERT_HELPER") is not None):
         env.setdefault("MAYA_GLM_MTP_FIXED", "1")
     # kept conversations outlive the engine (llama-swap and the like: the next request reads only what is new, not
     # the whole conversation again); one set by hand - to 0 too - is the user's, and an --env given now wins
