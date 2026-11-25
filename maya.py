@@ -620,11 +620,83 @@ MODELS = {
                            "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
                        "GLM-5.3-Flash-vocab.gguf":
                            "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
+    # (Kestrel) turboderp's self-calibrated quant at 2.10 bits (exllamav3 1.6, codebook mul1 - the 8060S helper's
+    # MAYA_GLM_HELPER_EXL3 takes its experts): on turboderp's chart a mean KL of 0.157 against the FP model (2.60:
+    # 0.093, 2.05bpw 0.193), 88.3 GB - about Maya-S24's size.  The MTP block is in its shards.
+    # By hand only (MODELS_BY_HAND): --model EXL3-sc_2.10bpw
+    "EXL3-sc_2.10bpw": {
+        "about": "turboderp's self-calibrated EXL3 quant at 2.10 bits per weight (exllamav3's trellis format, which the "
+                 "engine reads in place from its safetensors), with the MTP draft block - NVIDIA from V100, and AMD",
+        "format": "exl3", "repo": "turboderp/GLM-5.3-Flash-exl3", "branch": "sc_2.10bpw",
+        "revision": "8d2eca0ed5b695108249308bcdc2af0636d5045f", "folder": "", "download_gb": 88.3,
+        "files": {
+            "config.json": 86529, "LICENSE": 1070, "README.md": 7238, "chat_template.jinja": 8617,
+            "generation_config.json": 194, "model-00001-of-00012.safetensors": 8567975136,
+            "model-00002-of-00012.safetensors": 7765742994, "model-00003-of-00012.safetensors": 7765756986,
+            "model-00004-of-00012.safetensors": 7765756986, "model-00005-of-00012.safetensors": 7765756986,
+            "model-00006-of-00012.safetensors": 7765756986, "model-00007-of-00012.safetensors": 7765756986,
+            "model-00008-of-00012.safetensors": 7765756986, "model-00009-of-00012.safetensors": 7765756986,
+            "model-00010-of-00012.safetensors": 7765756986, "model-00011-of-00012.safetensors": 6303367524,
+            "model-00012-of-00012.safetensors": 3427783643, "model.safetensors.index.json": 16343097,
+            "processor_config.json": 909, "quantization_config.json": 47905716, "tokenizer.json": 20217442,
+            "tokenizer_config.json": 761},
+        "sha256": {
+            "config.json":
+                "31146dd4192fb1dce263cb14d27f8684fe3ed17f7acd355e8d1ae237c7b024cb",
+            "LICENSE":
+                "30b85b6b9659f2e78aa259f8faf5d920a68dee7c9ced3fa6dba1f19f2bc4fca1",
+            "README.md":
+                "4f46db37e6a7cbe3a494d6d7f616a96f4fffe6d1de68be361199a715c8d928fc",
+            "chat_template.jinja":
+                "41cff9af7b3a86c96751b107a8444f245fbda0bd5320b636a5bb1f7f4ba1a5c3",
+            "generation_config.json":
+                "230c30609ecbbb9e6583bedde8e7bdda0c6eb8fe5fad0eaeb3d1b293d751cb4f",
+            "model-00001-of-00012.safetensors":
+                "4cb1891ae8eb9ab0269f049d0ba5e324141b488c8413155943435c77fd1bed72",
+            "model-00002-of-00012.safetensors":
+                "107a5539bf0c324abb4b5417ef6c6207c5b3df8b84c5a78326caefb9df5ca4a1",
+            "model-00003-of-00012.safetensors":
+                "a38b16e3754ea271e300bff75a3123e695b25412760127b6d8e47ec0791bd3da",
+            "model-00004-of-00012.safetensors":
+                "1ef9a817cccbbc803fa0113ffd9ca1a9aed86ac990d95cc1550335175e9bc569",
+            "model-00005-of-00012.safetensors":
+                "31547000b3892d3469a61aa234b974dcfd4067f70c18b815d00efcf7399b8de5",
+            "model-00006-of-00012.safetensors":
+                "cf6b42119f6ef7c8af98b00a4c778ae879d04b938872a6e8f401bedfd95018d7",
+            "model-00007-of-00012.safetensors":
+                "6a6d8a2314409a7ee5281740ab31a85ca9fee0882e159f2d207a74186b88d452",
+            "model-00008-of-00012.safetensors":
+                "55318a0b50e8dcff5da17336055008494f21790fc58125a53cbc19df98376526",
+            "model-00009-of-00012.safetensors":
+                "6576557ce2bcba599eed092d420916d299ca09cc6bf0b860c7cd49a8c857fe33",
+            "model-00010-of-00012.safetensors":
+                "08f2437835c29a31b1f9203d0bd4b6ab47b67711656bf4ad4005683d6e868b00",
+            "model-00011-of-00012.safetensors":
+                "3135e401817587e188b9137a364cf73534e45224dd2a061285b3377c52f86330",
+            "model-00012-of-00012.safetensors":
+                "a2b5957a6b398778f1edc09df925e8c57416756cb2b0569bb82abbe13d1b753d",
+            "model.safetensors.index.json":
+                "d0721e726249ab0f9e10a3c5e3329bb2f1af4de31cd20865386ece9866f4c337",
+            "processor_config.json":
+                "aae38374c94b08cc9b0547c6e64f05b951bd9735cea571c6988f5ed552bed3ed",
+            "quantization_config.json":
+                "c92193014ed160c5aff709b7fc53bb8378982e4e6f9e4fb2397d6b7a6b87c1af",
+            "tokenizer.json":
+                "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+            "tokenizer_config.json":
+                "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc"},
+        "vision": {
+            "repo": "peasantsmith/GLM-5.3-Flash-Maya-GGUF", "revision": "main", "folder": "vision",
+            "mmproj": "mmproj-GLM-5.3-Flash-F16.gguf", "vocab": "GLM-5.3-Flash-vocab.gguf", "download_gb": 1.14,
+            "sha256": {"mmproj-GLM-5.3-Flash-F16.gguf":
+                           "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
+                       "GLM-5.3-Flash-vocab.gguf":
+                           "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
 }
 # Downloads the setup's model list no longer offers (the owner, v1.1.34): they stay in MODELS, so --model EXL3-sc_4.10bpw,
 # an install's update and a config that names them work as before; the list shows one only on a PC that has it set up
 # (its default there: a setup again, --yes included, keeps the model).
-MODELS_BY_HAND = ("EXL3-sc_4.10bpw", "EXL3-sc_2.60bpw")   # (Kestrel: sc_2.60)
+MODELS_BY_HAND = ("EXL3-sc_4.10bpw", "EXL3-sc_2.60bpw", "EXL3-sc_2.10bpw")   # (Kestrel: sc_2.60, sc_2.10)
 # GLM-5.3 (744B, glm-dsa) downloads, in MODELS' form: offered on every backend but Metal, and kept out of MODELS itself - its list, --model's help and the dashboard's catalog stay GLM-5.3-Flash's
 # (glm_downloads() adds them).  Maya's own quant first: GLM-5.3-Maya-XS (v1.1.58; the experts in ~1.6 bits, one repo
 # per model: peasantsmith/GLM-5.3-Maya-GGUF, folder Maya-XS), then the owner's pick "for now" (2026-11-06): unsloth's
