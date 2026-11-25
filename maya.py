@@ -541,11 +541,162 @@ MODELS = {
                            "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
                        "GLM-5.3-Flash-vocab.gguf":
                            "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
+    # (Kestrel) turboderp's self-calibrated quant at 2.60 bits (exllamav3 1.6, codebook mul1 - the 8060S helper's
+    # MAYA_GLM_HELPER_EXL3 takes its experts): on turboderp's chart a mean KL of 0.093 against the FP model (3.05bpw
+    # 0.068, 2.05bpw 0.193), 109 GB; the MTP block is in its shards (layer 45 of the index, no mtp.safetensors).
+    # By hand only (MODELS_BY_HAND): --model EXL3-sc_2.60bpw
+    "EXL3-sc_2.60bpw": {
+        "about": "turboderp's self-calibrated EXL3 quant at 2.60 bits per weight (exllamav3's trellis format, which the "
+                 "engine reads in place from its safetensors), with the MTP draft block - NVIDIA from V100, and AMD",
+        "format": "exl3", "repo": "turboderp/GLM-5.3-Flash-exl3", "branch": "sc_2.60bpw",
+        "revision": "24781209f2862a939cc21e01d256c943bd1a58a3", "folder": "", "download_gb": 109.0,
+        "files": {
+            "config.json": 86529, "LICENSE": 1070, "README.md": 7238, "chat_template.jinja": 8617,
+            "generation_config.json": 194, "model-00001-of-00015.safetensors": 7672575228,
+            "model-00002-of-00015.safetensors": 7233151230, "model-00003-of-00015.safetensors": 7224698907,
+            "model-00004-of-00015.safetensors": 7233161727, "model-00005-of-00015.safetensors": 7233161727,
+            "model-00006-of-00015.safetensors": 7233161727, "model-00007-of-00015.safetensors": 7224705897,
+            "model-00008-of-00015.safetensors": 7233161727, "model-00009-of-00015.safetensors": 7233161727,
+            "model-00010-of-00015.safetensors": 7233161727, "model-00011-of-00015.safetensors": 7224705897,
+            "model-00012-of-00015.safetensors": 7233161727, "model-00013-of-00015.safetensors": 7233161727,
+            "model-00014-of-00015.safetensors": 7233161727, "model-00015-of-00015.safetensors": 7238816518,
+            "model.safetensors.index.json": 16343098, "processor_config.json": 909,
+            "quantization_config.json": 47978292, "tokenizer.json": 20217442, "tokenizer_config.json": 761},
+        "sha256": {
+            "config.json":
+                "d5eeea0c6668a3c34f2ba3f32a47af7ad23d7843a73b41c5cec294d65ab53bde",
+            "LICENSE":
+                "30b85b6b9659f2e78aa259f8faf5d920a68dee7c9ced3fa6dba1f19f2bc4fca1",
+            "README.md":
+                "4f46db37e6a7cbe3a494d6d7f616a96f4fffe6d1de68be361199a715c8d928fc",
+            "chat_template.jinja":
+                "41cff9af7b3a86c96751b107a8444f245fbda0bd5320b636a5bb1f7f4ba1a5c3",
+            "generation_config.json":
+                "230c30609ecbbb9e6583bedde8e7bdda0c6eb8fe5fad0eaeb3d1b293d751cb4f",
+            "model-00001-of-00015.safetensors":
+                "cd1ca38776373439e605ab92fb8bc4083a1d94a7fc76c9b8d9fd22f6049ee6be",
+            "model-00002-of-00015.safetensors":
+                "53cc659e557ec78221fc27ab7fe282799210d57270b44c97ea3a87fe9a6cb8b5",
+            "model-00003-of-00015.safetensors":
+                "1a5b61b4398a80b1b715495857491e93823f899e0f1fd2eebe4c3a987d67081f",
+            "model-00004-of-00015.safetensors":
+                "98de43425157a9049d94f0fcac2190d0d4663f54dcd29087e9811f206d338bfd",
+            "model-00005-of-00015.safetensors":
+                "ef7f5b240bf6636feb0a33059edf4e7a2a3e1593b9da15246d360840df30fa53",
+            "model-00006-of-00015.safetensors":
+                "956dbcc264d7d3338e21310b3ef8afb543ba375487057c8f00e13ea7e4d9a2d2",
+            "model-00007-of-00015.safetensors":
+                "08ed6b5fc1e8e4594b8e9ddcbb79e48396ba3bd64c37db7c7f19ba722fbfd208",
+            "model-00008-of-00015.safetensors":
+                "be9c36965037a4f3b4341b0ce31d97e1e3c14380aa9bf165d459393570657334",
+            "model-00009-of-00015.safetensors":
+                "222c7e4878c31bb394d239ee05b912b57e963fc308f9b879448b4807d3a5df12",
+            "model-00010-of-00015.safetensors":
+                "ca675ee8167dc9e27db02e1b8902d480cc96f9e8dc6d0bb576a58257334306cc",
+            "model-00011-of-00015.safetensors":
+                "d6cee4e0ad02fd3bb69bf8ac722c267ee05dacbd9869f9531e79148a810b3ea7",
+            "model-00012-of-00015.safetensors":
+                "3c1a82e88e155589e8a138b65d09fc45cfd47e56220640d648d164d34970bbd2",
+            "model-00013-of-00015.safetensors":
+                "5fdffa6db928f856e75db1effd45c8899d98c9f51a288d38aa52efbb12a57bbe",
+            "model-00014-of-00015.safetensors":
+                "a5543913ec01376b543003fa206a3b1ebccd80b15ead147e71d4991ed22afdb3",
+            "model-00015-of-00015.safetensors":
+                "c28ccd70195d25720aed236974319e51e4313562dd3b235fce6da65bff630e34",
+            "model.safetensors.index.json":
+                "cdc7911b8b9a2d0bee1e78c38f2cf9dc72fba88f47cd6010c8aa50c11eb18f28",
+            "processor_config.json":
+                "aae38374c94b08cc9b0547c6e64f05b951bd9735cea571c6988f5ed552bed3ed",
+            "quantization_config.json":
+                "51bb7b563de29bbb31f6dca24b68b52b3f81bd280c2f9a71eac605b37ebda5c7",
+            "tokenizer.json":
+                "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+            "tokenizer_config.json":
+                "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc"},
+        "vision": {
+            "repo": "peasantsmith/GLM-5.3-Flash-Maya-GGUF", "revision": "main", "folder": "vision",
+            "mmproj": "mmproj-GLM-5.3-Flash-F16.gguf", "vocab": "GLM-5.3-Flash-vocab.gguf", "download_gb": 1.14,
+            "sha256": {"mmproj-GLM-5.3-Flash-F16.gguf":
+                           "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
+                       "GLM-5.3-Flash-vocab.gguf":
+                           "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
+    # (Kestrel) turboderp's self-calibrated quant at 2.10 bits (exllamav3 1.6, codebook mul1 - the 8060S helper's
+    # MAYA_GLM_HELPER_EXL3 takes its experts): on turboderp's chart a mean KL of 0.157 against the FP model (2.60:
+    # 0.093, 2.05bpw 0.193), 88.3 GB - about Maya-S24's size.  The MTP block is in its shards.
+    # By hand only (MODELS_BY_HAND): --model EXL3-sc_2.10bpw
+    "EXL3-sc_2.10bpw": {
+        "about": "turboderp's self-calibrated EXL3 quant at 2.10 bits per weight (exllamav3's trellis format, which the "
+                 "engine reads in place from its safetensors), with the MTP draft block - NVIDIA from V100, and AMD",
+        "format": "exl3", "repo": "turboderp/GLM-5.3-Flash-exl3", "branch": "sc_2.10bpw",
+        "revision": "8d2eca0ed5b695108249308bcdc2af0636d5045f", "folder": "", "download_gb": 88.3,
+        "files": {
+            "config.json": 86529, "LICENSE": 1070, "README.md": 7238, "chat_template.jinja": 8617,
+            "generation_config.json": 194, "model-00001-of-00012.safetensors": 8567975136,
+            "model-00002-of-00012.safetensors": 7765742994, "model-00003-of-00012.safetensors": 7765756986,
+            "model-00004-of-00012.safetensors": 7765756986, "model-00005-of-00012.safetensors": 7765756986,
+            "model-00006-of-00012.safetensors": 7765756986, "model-00007-of-00012.safetensors": 7765756986,
+            "model-00008-of-00012.safetensors": 7765756986, "model-00009-of-00012.safetensors": 7765756986,
+            "model-00010-of-00012.safetensors": 7765756986, "model-00011-of-00012.safetensors": 6303367524,
+            "model-00012-of-00012.safetensors": 3427783643, "model.safetensors.index.json": 16343097,
+            "processor_config.json": 909, "quantization_config.json": 47905716, "tokenizer.json": 20217442,
+            "tokenizer_config.json": 761},
+        "sha256": {
+            "config.json":
+                "31146dd4192fb1dce263cb14d27f8684fe3ed17f7acd355e8d1ae237c7b024cb",
+            "LICENSE":
+                "30b85b6b9659f2e78aa259f8faf5d920a68dee7c9ced3fa6dba1f19f2bc4fca1",
+            "README.md":
+                "4f46db37e6a7cbe3a494d6d7f616a96f4fffe6d1de68be361199a715c8d928fc",
+            "chat_template.jinja":
+                "41cff9af7b3a86c96751b107a8444f245fbda0bd5320b636a5bb1f7f4ba1a5c3",
+            "generation_config.json":
+                "230c30609ecbbb9e6583bedde8e7bdda0c6eb8fe5fad0eaeb3d1b293d751cb4f",
+            "model-00001-of-00012.safetensors":
+                "4cb1891ae8eb9ab0269f049d0ba5e324141b488c8413155943435c77fd1bed72",
+            "model-00002-of-00012.safetensors":
+                "107a5539bf0c324abb4b5417ef6c6207c5b3df8b84c5a78326caefb9df5ca4a1",
+            "model-00003-of-00012.safetensors":
+                "a38b16e3754ea271e300bff75a3123e695b25412760127b6d8e47ec0791bd3da",
+            "model-00004-of-00012.safetensors":
+                "1ef9a817cccbbc803fa0113ffd9ca1a9aed86ac990d95cc1550335175e9bc569",
+            "model-00005-of-00012.safetensors":
+                "31547000b3892d3469a61aa234b974dcfd4067f70c18b815d00efcf7399b8de5",
+            "model-00006-of-00012.safetensors":
+                "cf6b42119f6ef7c8af98b00a4c778ae879d04b938872a6e8f401bedfd95018d7",
+            "model-00007-of-00012.safetensors":
+                "6a6d8a2314409a7ee5281740ab31a85ca9fee0882e159f2d207a74186b88d452",
+            "model-00008-of-00012.safetensors":
+                "55318a0b50e8dcff5da17336055008494f21790fc58125a53cbc19df98376526",
+            "model-00009-of-00012.safetensors":
+                "6576557ce2bcba599eed092d420916d299ca09cc6bf0b860c7cd49a8c857fe33",
+            "model-00010-of-00012.safetensors":
+                "08f2437835c29a31b1f9203d0bd4b6ab47b67711656bf4ad4005683d6e868b00",
+            "model-00011-of-00012.safetensors":
+                "3135e401817587e188b9137a364cf73534e45224dd2a061285b3377c52f86330",
+            "model-00012-of-00012.safetensors":
+                "a2b5957a6b398778f1edc09df925e8c57416756cb2b0569bb82abbe13d1b753d",
+            "model.safetensors.index.json":
+                "d0721e726249ab0f9e10a3c5e3329bb2f1af4de31cd20865386ece9866f4c337",
+            "processor_config.json":
+                "aae38374c94b08cc9b0547c6e64f05b951bd9735cea571c6988f5ed552bed3ed",
+            "quantization_config.json":
+                "c92193014ed160c5aff709b7fc53bb8378982e4e6f9e4fb2397d6b7a6b87c1af",
+            "tokenizer.json":
+                "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+            "tokenizer_config.json":
+                "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc"},
+        "vision": {
+            "repo": "peasantsmith/GLM-5.3-Flash-Maya-GGUF", "revision": "main", "folder": "vision",
+            "mmproj": "mmproj-GLM-5.3-Flash-F16.gguf", "vocab": "GLM-5.3-Flash-vocab.gguf", "download_gb": 1.14,
+            "sha256": {"mmproj-GLM-5.3-Flash-F16.gguf":
+                           "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
+                       "GLM-5.3-Flash-vocab.gguf":
+                           "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
 }
 # Downloads the setup's model list no longer offers (the owner, v1.1.34): they stay in MODELS, so --model EXL3-sc_4.10bpw,
 # an install's update and a config that names them work as before; the list shows one only on a PC that has it set up
 # (its default there: a setup again, --yes included, keeps the model).
-MODELS_BY_HAND = ("EXL3-sc_4.10bpw",)
+MODELS_BY_HAND = ("EXL3-sc_4.10bpw", "EXL3-sc_2.60bpw", "EXL3-sc_2.10bpw")   # (Kestrel: sc_2.60, sc_2.10)
 # GLM-5.3 (744B, glm-dsa) downloads, in MODELS' form: offered on every backend but Metal, and kept out of MODELS itself - its list, --model's help and the dashboard's catalog stay GLM-5.3-Flash's
 # (glm_downloads() adds them).  Maya's own quant first: GLM-5.3-Maya-XS (v1.1.58; the experts in ~1.6 bits, one repo
 # per model: peasantsmith/GLM-5.3-Maya-GGUF, folder Maya-XS), then the owner's pick "for now" (2026-11-06): unsloth's
@@ -1118,6 +1269,15 @@ def hip_unified_memory(g) -> bool:
     # only a tiny firmware VRAM carve-out. This is independent of vram_gb.
     return g.get("arch") == "gfx1151" or bool(g.get("integrated")) or bool(
         re.search(r"Ryzen AI Max|Radeon(?:\s*\(TM\))?\s+80[4-6]\dS", g.get("name", ""), re.I))
+
+
+def hip_helper_layout(pc: dict) -> bool:
+    """AMD (HIP) with a discrete lead card and a Ryzen AI Max APU beside it (check_pc's GPUs, the discrete one
+    first): the card runs the model and the APU is its expert helper in the RAM they share. DFlash2 is measured
+    faster than the MTP block on this layout (an R9700 with an 8060S: decode +16-20%)."""
+    gpus = pc.get("gpus") or []
+    return (pc.get("backend") == "hip" and len(gpus) > 1
+            and any(hip_unified_memory(g) for g in gpus) and any(not hip_unified_memory(g) for g in gpus))
 
 
 def apu_margin_gb(ram: float) -> float:
@@ -2030,15 +2190,21 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     """"mtp" (the model's own MTP block; the default) or "dflash2" (a DFlash2 drafter, downloaded in step 5): --draft,
     else asked - the earlier setup's answer is the default.  AMD (HIP) setups keep MTP, except one Ryzen AI Max APU
     (hip_unified_memory: Strix / Gorgon Halo), where DFlash2 is measured (a Radeon 8060S with every expert in its
-    memory: glm_dflash_test passes; --bench decode +9% against the MTP block, the speed calibration +5%).  So do NVIDIA
+    memory: glm_dflash_test passes; --bench decode +9% against the MTP block, the speed calibration +5%), and a
+    discrete card with such an APU as its expert helper (hip_helper_layout: +16-20% decode on an R9700 with an
+    8060S), where it is offered too.  So do NVIDIA
     GPUs before sm_80 (RTX 30 / A100): on Tesla V100s DFlash2 decoded slower than the MTP block (one GPU and two).  A
     DFlash2 answer is then checked on this PC by the speed calibration (speed_calibration): it stays only where it is
-    faster.  On Metal both are exact and neither is measured: MTP is the default, the choice is yours."""
+    faster.  Declining - or a session that cannot ask - keeps MTP (write_config fixes the draft length at 1 for a
+    GLM-5.3-Flash config on the helper layout: measured there faster than letting it search).  The drafter's
+    license is shown with the question, never only after the download.  On Metal
+    both are exact and neither is measured: MTP is the default, the choice is yours."""
     if getattr(a, "draft", None):
         return a.draft
     gpus = pc.get("gpus") or []
     one_apu = pc.get("backend") == "hip" and len(gpus) == 1 and hip_unified_memory(gpus[0])
-    if pc.get("backend") == "hip" and not one_apu:
+    helper = hip_helper_layout(pc)
+    if pc.get("backend") == "hip" and not (one_apu or helper):
         return "mtp"
     if pc.get("backend") != "hip" and pc.get("archs") and min(int(x) for x in pc["archs"]) < 80:
         return "mtp"
@@ -2046,17 +2212,23 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     metal = pc.get("backend") == "metal"
     mtp_where = ("" if metal else
                  " It drafts on this one GPU (an APU that holds the model in its memory)." if one_apu else
+                 " It drafts on the lead GPU, beside the APU helper's experts." if helper else
                  " On two GPUs or more; one GPU decodes without drafting.")
     rows = [("the model's MTP block", "default",
              "The model's own draft block guesses the next token, which the model then checks." + mtp_where),
             (f"a DFlash2 drafter (download {DFLASH['bytes'] / 1e9:.1f} GB from Hugging Face)", None,
              "A small drafter made for GLM-5.3-Flash drafts up to 7 tokens a round, which the model then checks"
              + (", so every token is the model's own pick. Not measured on a Mac: which one is faster is yours to try. " if metal else
-             ": every token is the model's own pick, faster. Maya-L: +44% on nine GPUs and +12% on two against the MTP block, +19% on one RTX 3090. A speed "
+             ": every token is the model's own pick, faster. Maya-L: +44% on nine GPUs and +12% on two against the MTP block, "
+             + "+19% on one RTX 3090"
+             + (", +16-20% with a discrete AMD card and this APU helper" if helper else "")
+             + ". A speed "
              "calibration then measures it against the MTP block on this PC (5-20 minutes) and keeps it only if it "
-             "is faster here. ") + f"The drafter's license is {DFLASH['license']}: non-commercial use only.")]
+             "is faster here. "))]
     pick = choose("Drafting?", ["How the model drafts tokens ahead (the answers are the same either way):"], rows,
-                  DRAFTS.index(default), a.yes)
+                  DRAFTS.index(default), a.yes,
+                  outro=[f"A DFlash2 drafter is downloaded from Hugging Face; its license is {DFLASH['license']}: "
+                         "non-commercial use only."])
     return DRAFTS[pick]
 
 
@@ -4812,7 +4984,7 @@ def glm_config_path(pc: dict, quant: str) -> Path:
 # the environment settings the GLM setup itself writes (or leaves out) by the PC and GPUs chosen - a setup again works
 # them out anew instead of keeping the config before's
 GLM_SETUP_ENV = ("MAYA_GLM_RESERVE_MB", "MAYA_VRAM_RESERVE_SETUP_MB", "MAYA_GLM_RAM_HEADROOM_GB", "MAYA_GLM_SPLIT",
-                 "MAYA_GLM_MTP_DECODE",
+                 "MAYA_GLM_MTP_DECODE", "MAYA_GLM_MTP_ADAPT",
                  "MAYA_GLM_PARALLEL_LOAD", "MAYA_GLM_PREFILL_SUB", "MAYA_GLM_PREFILL_MB", "MAYA_HIPBLASLT_TUNING")
 
 # the server's own settings, set in a config by hand (or with --port / --host / --api-key at a setup): every model's
@@ -4907,8 +5079,12 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
             total_ram, _ = mem_gb()
             if WIN:     # Windows counts the GPU's carve-out apart from its RAM, and its desktop runs on that GPU
                 total_ram += sum(g.get("vram_gb", 0) for g in gpus)
-            hip_env.update({"MAYA_GLM_PREFILL_SUB": "1024",
-                            "MAYA_GLM_PREFILL_MB": "6144" if total_ram >= 96 else "4096"})
+            # (Kestrel) an EXL3 pack with the 6 GB budget: sub-batches of 4096 - its trunk's matrices are decoded
+            # once a sub-batch.  R9700 + 8060S, sc_2.60bpw, a 55K-token prompt: 648 -> 736-741 tok/s (8192 left the
+            # expert pool too little: 729).  Maya-S24 (GGUF) is slower at 4096 there (726 -> 686): 1024 stays.
+            big = total_ram >= 96
+            hip_env.update({"MAYA_GLM_PREFILL_SUB": "4096" if big and is_exl3(quant) else "1024",
+                            "MAYA_GLM_PREFILL_MB": "6144" if big else "4096"})
         elif min(g.get("vram_gb", 0) for g in gpus) >= 19.5:   # (an RX 7900 XT reports 19.98)
             hip_env.update({"MAYA_GLM_PREFILL_SUB": "1024", "MAYA_GLM_PREFILL_MB": "4096"})
         # Pass every available version per architecture: the engine's existing header guard selects the
@@ -4937,6 +5113,19 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
     # given now wins
     own = set(GLM_SETUP_ENV) | set(CAL.KEYS)
     forced, env = env, {**{k: v for k, v in (old_cfg.get("env") or {}).items() if N.shown(str(k)) not in own}, **env}
+    # the MTP block beside an APU expert helper drafts at one fixed length of 1: measured on the reference PC the
+    # same short decode as MAYA_GLM_MTP_ADAPT=1, a faster decode after a long read (28-30 against 25-27 tok/s) and
+    # the same answers on every start.  Not for GLM-5.3 (glm-dsa), which drafts by its own rules, and not beside a
+    # DFlash2 drafter, which loads no MTP block.  A length set by hand - in the config before or with --env - is
+    # the user's, and so is the one the NVIDIA calibration learned (installer.glm_draft_length)
+    if dflash is None and not dsa and hip_helper_layout(pc):
+        env.setdefault("MAYA_GLM_MTP_FIXED", "1")
+    # kept conversations outlive the engine (llama-swap and the like: the next request reads only what is new, not
+    # the whole conversation again); one set by hand - to 0 too - is the user's, and an --env given now wins
+    env.setdefault("MAYA_GLM_SLOT_KEEP", "1")
+    if str(env.get("MAYA_GLM_SLOT_KEEP")) == "1":
+        ok("conversations are kept on disk between starts: up to 16 GB of slots in the pack's folder, 7 days "
+           "(MAYA_GLM_SLOT_GB, MAYA_GLM_SLOT_DAYS)")
     if env:
         cfg["env"] = env
     # the server's own settings from the config before (the address it listens on, its API key, ...): kept, as the

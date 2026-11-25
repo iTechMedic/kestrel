@@ -25,6 +25,8 @@ ALIASES = {
     "Maya-M-Derisked": ("glm", "Maya-M-Derisked"), "Maya-L": ("glm", "Maya-L"),
     "EXL3-3.05bpw": ("glm", "EXL3-3.05bpw"), "EXL3-4.05bpw": ("glm", "EXL3-4.05bpw"),
     "EXL3-sc_4.10bpw": ("glm", "EXL3-sc_4.10bpw"),
+    "EXL3-sc_2.60bpw": ("glm", "EXL3-sc_2.60bpw"),   # (Kestrel: by hand, like sc_4.10)
+    "EXL3-sc_2.10bpw": ("glm", "EXL3-sc_2.10bpw"),   # (Kestrel: by hand, like sc_4.10)
     "DeepSeek-V4.1-Flash-1017": ("deepseek", None), "MiniMax-M3.1-Flash": ("minimax", None),
 }
 # the setup ids (new) -> (family, key, what the picker and the dashboard show)

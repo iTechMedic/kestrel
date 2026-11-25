@@ -288,7 +288,8 @@ class InTheSetup(unittest.TestCase):
     def test_the_setup_text_says_faster_and_that_it_is_measured(self):
         args = SimpleNamespace(draft=None, yes=True)
         shown = []
-        with patch.object(maya, "choose", side_effect=lambda q, intro, rows, d, y: shown.extend(rows) or 0):
+        with patch.object(maya, "choose",
+                          side_effect=lambda q, intro, rows, d, y, outro=(): shown.extend(rows) or 0):
             maya.choose_draft(args, {"backend": "cuda", "archs": [86]}, {})
         text = shown[1][2]
         self.assertIn("every token is the model's own pick, faster", text)

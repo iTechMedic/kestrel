@@ -1397,6 +1397,7 @@ static int glm_pack_generate(const Options& o) {
     std::vector<Slot> slots;
     uint64_t slot_clock = 0, slot_seq = 0;
     bool snap_in_slot = false;   // the model's snapshot is one of the slots, unchanged since
+    size_t answer_at = 0;        // (Kestrel) the snapshot holds the last answer from this token on (0: it holds none)
     const auto env_num = [](const char* k, double d) { const char* v = getenv(k); return v ? std::atof(v) : d; };
     const bool no_reuse = maya::glmenv::no_reuse_env();
     int slot_max = model.fast() && !no_reuse ? (int) env_num("MAYA_GLM_SLOTS", 4) : 0;
@@ -1886,6 +1887,29 @@ static int glm_pack_generate(const Options& o) {
         const bool snap_ok = !abl_flip && model.fast() && !snap_tokens.empty() && snap_tokens.size() < prompt.size() &&
                              std::equal(snap_tokens.begin(), snap_tokens.end(), prompt.begin()) &&
                              img_hash(snap_tokens.size()) == snap_img_hash && !no_reuse;
+        // (Kestrel) the last answer's state (answer_snapshot): continued whole, or where this prompt leaves it - a
+        // client that sends the answer back otherwise than it was written (the template's whitespace, a tool call's
+        // arguments re-rendered, reasoning dropped) reads from the prompt's end checkpoint, as before
+        if (answer_at > 0 && !snap_tokens.empty() && answer_at <= snap_tokens.size()) {
+            const size_t wrote = snap_tokens.size() - answer_at;
+            if (snap_ok) {
+                std::fprintf(stderr, "glm reuse: the last answer's state goes on: %zu of the prompt's %zu tokens kept "
+                             "(%zu the model wrote)\n", snap_tokens.size(), prompt.size(), wrote);
+            } else {
+                const size_t n = std::min(snap_tokens.size(), prompt.size());
+                size_t i = 0;
+                while (i < n && snap_tokens[i] == prompt[i]) ++i;
+                if (i >= answer_at)
+                    std::fprintf(stderr, "glm reuse: the prompt leaves the last answer at its token %zu of %zu (kept id "
+                                 "%d, sent id %d): read from the prompt's end\n", i - answer_at, wrote,
+                                 i < snap_tokens.size() ? (int) snap_tokens[i] : -1,
+                                 i < prompt.size() ? (int) prompt[i] : -1);
+                else
+                    std::fprintf(stderr, "glm reuse: the prompt leaves the conversation at token %zu, before the last "
+                                 "answer (it began at %zu)\n", i, answer_at);
+            }
+        }
+        answer_at = 0;
         // the longest checkpoint this prompt starts with (it holds less than the snapshot when both match)
         int ck = -1;
         if (ckpt_max > 0 && cur_img_pos.empty() && !abl_flip)
@@ -2259,6 +2283,49 @@ static int glm_pack_generate(const Options& o) {
             }
         }
     };
+    // (Kestrel) THE ANSWER'S STATE: an agent's next turn sends the answer back (GLM's template keeps the reasoning of
+    // every assistant turn after the last user message, so a tool loop's turns come back as they were written) and
+    // used to read all of it again - the snapshot stood before the answer (32K written tokens: 47 s on an R9700).  At
+    // a finished answer the snapshot moves to the last token fed, as a PAUSE moves it, and the prompt's state it held
+    // is kept as a checkpoint first: a next prompt that renders the answer otherwise (a new user message drops the
+    // reasoning) takes that checkpoint and reads what it read before.  MAYA_GLM_ANSWER_SNAP=0: off.
+    const auto answer_snapshot = [&](const std::vector<int32_t>& prompt, const std::vector<int32_t>& emitted) {
+        static const bool on = maya::glmenv::env_flag("MAYA_GLM_ANSWER_SNAP", true);
+        if (!on || !model.fast() || emitted.empty() || model.seq_count() > 1 || model.ablating() || no_reuse)
+            return;
+        const bool pics = !cur_img_pos.empty();
+        const int64_t p = model.position();
+        const int64_t full = (int64_t) (prompt.size() + emitted.size());
+        if (p <= (int64_t) prompt.size() || p > full) {
+            std::fprintf(stderr, "glm reuse: the state stands at %lld of %lld tokens after the answer: not kept\n",
+                         (long long) p, (long long) full);
+            return;
+        }
+        // the prompt's snapshot (the prompt but its last token or its generation prompt) into a checkpoint first -
+        // short prompts too: the same prompt again (a retry, a regenerated answer) took the snapshot back at once
+        // before (0.03 s), and found nothing to take back once the snapshot had moved on past the answer (1 s)
+        if (!pics && ckpt_max > 0 && !snap_tokens.empty() && snap_tokens.size() < prompt.size() &&
+            std::equal(snap_tokens.begin(), snap_tokens.end(), prompt.begin())) {
+            bool have = false;
+            for (const auto& c : ckpts) have = have || c.tokens == snap_tokens;
+            if (!have) ckpt_keep(prompt, snap_tokens.size(), true);
+        }
+        // a prompt with pictures has no checkpoints (text only): its state goes to a slot instead, which keeps the
+        // pictures' fingerprint (a coding agent's screenshot rode along in every turn, and every turn read the last
+        // answer again: 19.9K tokens, 27 s).  No slot (off, or a prompt under MAYA_GLM_SLOT_MIN): the snapshot stays.
+        if (pics) {
+            if (!snap_in_slot) slot_put(" (the prompt's state, before its answer)");
+            if (!snap_in_slot) return;
+        }
+        if (!model.snapshot_save()) return;
+        snap_tokens.assign(prompt.begin(), prompt.end());
+        snap_tokens.insert(snap_tokens.end(), emitted.begin(), emitted.begin() + (p - (int64_t) prompt.size()));
+        snap_img_hash = img_hash(snap_tokens.size());
+        snap_in_slot = false;
+        answer_at = prompt.size();
+        std::fprintf(stderr, "glm reuse: the answer's state is kept (%lld tokens, %lld written): a next turn that sends "
+                             "it back reads only what is new\n", (long long) p, (long long) (p - (int64_t) prompt.size()));
+    };
     // MAYA_GLM_SPEC_FOLLOW=<file> (--spec-follow): every request decodes this continuation instead of its own picks
     // and ends with it (Glm5Model::set_follow) - a speed A/B on one text.  MAYA_GLM_SPEC_FOLLOW_SAVE=<file>
     // (--spec-follow-save): each request's decoded ids are written there, the next run's continuation.  A text made by
@@ -2520,6 +2587,8 @@ static int glm_pack_generate(const Options& o) {
                     reuse, (unsigned long long) d_hits, (unsigned long long) (d_hits + d_miss));
         std::fflush(stdout);
         if (pause_req.load() && std::strcmp(finish, "cancel") == 0) pause_snapshot(prompt, emitted, pause_keep.load());
+        else if (std::strcmp(finish, "stop") == 0 || std::strcmp(finish, "length") == 0)
+            answer_snapshot(prompt, emitted);   // (Kestrel)
         // this machine's expert usage, for the next start's warm-up (after DONE: the client is not kept waiting)
         if (model.fast()) model.save_usage();
         if (model.fast() && produced > 0) {
