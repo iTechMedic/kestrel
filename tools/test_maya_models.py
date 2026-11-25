@@ -433,13 +433,26 @@ class DraftChoice(unittest.TestCase):
 
     def test_amd_keeps_mtp_without_asking(self):
         rx = {"arch": "gfx1201", "name": "Radeon RX 9070 XT", "vram_gb": 16}
-        halo = {"arch": "gfx1151", "name": "Radeon 8060S", "vram_gb": 108}
         with patch.object(maya, "choose", side_effect=AssertionError("asked")):
             self.assertEqual(self.choose({"draft": "dflash2"}, pc={"backend": "hip"}, yes=False), "mtp")
             self.assertEqual(self.choose({"draft": "dflash2"}, pc={"backend": "hip", "gpus": [rx]}, yes=False), "mtp")
-            # a discrete card beside the APU: the window would span two GPUs, not measured on AMD
-            self.assertEqual(self.choose({"draft": "dflash2"}, pc={"backend": "hip", "gpus": [rx, halo]}, yes=False),
-                             "mtp")
+
+    def test_a_discrete_card_with_an_apu_helper_is_asked(self):
+        """The helper layout: DFlash2 is offered (measured +16-20%), its license is said before the answer and the
+        download, MTP stays the default - a decline, and a session that cannot ask, keep it."""
+        rx = {"arch": "gfx1201", "name": "Radeon RX 9070 XT", "vram_gb": 16}
+        halo = {"arch": "gfx1151", "name": "Radeon 8060S", "vram_gb": 108}
+        pc = {"backend": "hip", "gpus": [rx, halo]}
+        self.assertEqual(self.choose({}, pc=pc), "mtp")                        # --yes: the default, nothing asked
+        self.assertEqual(self.choose({"draft": "dflash2"}, pc=pc), "dflash2")  # the earlier answer stays the default
+        said = []
+        with patch.object(maya, "say", side_effect=lambda *a: said.append(" ".join(str(x) for x in a))), \
+                patch.object(maya, "ask", return_value="2") as asked:
+            self.assertEqual(maya.choose_draft(SimpleNamespace(draft=None, yes=False), pc, {}), "dflash2")
+        self.assertTrue(asked.called)
+        self.assertIn("non-commercial", " ".join(said))   # said with the question, not only when downloading
+        with patch.object(maya, "ask", return_value="1"):
+            self.assertEqual(maya.choose_draft(SimpleNamespace(draft=None, yes=False), pc, {}), "mtp")
         self.assertEqual(self.choose({}, pc={"backend": "hip", "gpus": [rx]}, draft="dflash2"), "dflash2")
 
     def test_one_ryzen_ai_max_apu_is_asked(self):
@@ -453,12 +466,16 @@ class DraftChoice(unittest.TestCase):
         """One NVIDIA GPU decodes without the MTP block; one Ryzen AI Max APU drafts with it (MAYA_GLM_MTP_DECODE)."""
         def mtp_text(pc):
             shown = []
-            with patch.object(maya, "choose", side_effect=lambda q, intro, rows, d, y: shown.extend(rows) or 0):
+            with patch.object(maya, "choose",
+                              side_effect=lambda q, intro, rows, d, y, outro=(): shown.extend(rows) or 0):
                 maya.choose_draft(SimpleNamespace(draft=None, yes=True), pc, {})
             return shown[0][2]
         apu = mtp_text({"backend": "hip", "gpus": [{"arch": "gfx1151", "name": "Radeon 8060S"}]})
         self.assertNotIn("one GPU decodes without drafting", apu)
         self.assertIn("It drafts on this one GPU", apu)
+        helper = mtp_text({"backend": "hip", "gpus": [{"arch": "gfx1201", "name": "Radeon RX 9070 XT", "vram_gb": 16},
+                                                      {"arch": "gfx1151", "name": "Radeon 8060S", "vram_gb": 108}]})
+        self.assertIn("It drafts on the lead GPU", helper)
         self.assertIn("one GPU decodes without drafting", mtp_text({"backend": "cuda", "archs": [86]}))
 
     def test_gpus_before_sm80_keep_mtp_without_asking(self):

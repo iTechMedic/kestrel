@@ -1271,6 +1271,15 @@ def hip_unified_memory(g) -> bool:
         re.search(r"Ryzen AI Max|Radeon(?:\s*\(TM\))?\s+80[4-6]\dS", g.get("name", ""), re.I))
 
 
+def hip_helper_layout(pc: dict) -> bool:
+    """AMD (HIP) with a discrete lead card and a Ryzen AI Max APU beside it (check_pc's GPUs, the discrete one
+    first): the card runs the model and the APU is its expert helper in the RAM they share. DFlash2 is measured
+    faster than the MTP block on this layout (an R9700 with an 8060S: decode +16-20%)."""
+    gpus = pc.get("gpus") or []
+    return (pc.get("backend") == "hip" and len(gpus) > 1
+            and any(hip_unified_memory(g) for g in gpus) and any(not hip_unified_memory(g) for g in gpus))
+
+
 def apu_margin_gb(ram: float) -> float:
     """The memory both engines keep free for Windows / Linux and the other programs on a unified-memory APU,
     max(8 GB, 10% of the RAM)."""
@@ -2181,15 +2190,20 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     """"mtp" (the model's own MTP block; the default) or "dflash2" (a DFlash2 drafter, downloaded in step 5): --draft,
     else asked - the earlier setup's answer is the default.  AMD (HIP) setups keep MTP, except one Ryzen AI Max APU
     (hip_unified_memory: Strix / Gorgon Halo), where DFlash2 is measured (a Radeon 8060S with every expert in its
-    memory: glm_dflash_test passes; --bench decode +9% against the MTP block, the speed calibration +5%).  So do NVIDIA
+    memory: glm_dflash_test passes; --bench decode +9% against the MTP block, the speed calibration +5%), and a
+    discrete card with such an APU as its expert helper (hip_helper_layout: +16-20% decode on an R9700 with an
+    8060S), where it is offered too.  So do NVIDIA
     GPUs before sm_80 (RTX 30 / A100): on Tesla V100s DFlash2 decoded slower than the MTP block (one GPU and two).  A
     DFlash2 answer is then checked on this PC by the speed calibration (speed_calibration): it stays only where it is
-    faster.  On Metal both are exact and neither is measured: MTP is the default, the choice is yours."""
+    faster.  Declining - or a session that cannot ask - keeps MTP (write_config then lets the draft length adapt on
+    the helper layout).  The drafter's license is shown with the question, never only after the download.  On Metal
+    both are exact and neither is measured: MTP is the default, the choice is yours."""
     if getattr(a, "draft", None):
         return a.draft
     gpus = pc.get("gpus") or []
     one_apu = pc.get("backend") == "hip" and len(gpus) == 1 and hip_unified_memory(gpus[0])
-    if pc.get("backend") == "hip" and not one_apu:
+    helper = hip_helper_layout(pc)
+    if pc.get("backend") == "hip" and not (one_apu or helper):
         return "mtp"
     if pc.get("backend") != "hip" and pc.get("archs") and min(int(x) for x in pc["archs"]) < 80:
         return "mtp"
@@ -2197,17 +2211,23 @@ def choose_draft(a, pc: dict, inst: dict) -> str:
     metal = pc.get("backend") == "metal"
     mtp_where = ("" if metal else
                  " It drafts on this one GPU (an APU that holds the model in its memory)." if one_apu else
+                 " It drafts on the lead GPU, beside the APU helper's experts." if helper else
                  " On two GPUs or more; one GPU decodes without drafting.")
     rows = [("the model's MTP block", "default",
              "The model's own draft block guesses the next token, which the model then checks." + mtp_where),
             (f"a DFlash2 drafter (download {DFLASH['bytes'] / 1e9:.1f} GB from Hugging Face)", None,
              "A small drafter made for GLM-5.3-Flash drafts up to 7 tokens a round, which the model then checks"
              + (", so every token is the model's own pick. Not measured on a Mac: which one is faster is yours to try. " if metal else
-             ": every token is the model's own pick, faster. Maya-L: +44% on nine GPUs and +12% on two against the MTP block, +19% on one RTX 3090. A speed "
+             ": every token is the model's own pick, faster. Maya-L: +44% on nine GPUs and +12% on two against the MTP block, "
+             + "+19% on one RTX 3090"
+             + (", +16-20% with a discrete AMD card and this APU helper" if helper else "")
+             + ". A speed "
              "calibration then measures it against the MTP block on this PC (5-20 minutes) and keeps it only if it "
-             "is faster here. ") + f"The drafter's license is {DFLASH['license']}: non-commercial use only.")]
+             "is faster here. "))]
     pick = choose("Drafting?", ["How the model drafts tokens ahead (the answers are the same either way):"], rows,
-                  DRAFTS.index(default), a.yes)
+                  DRAFTS.index(default), a.yes,
+                  outro=[f"A DFlash2 drafter is downloaded from Hugging Face; its license is {DFLASH['license']}: "
+                         "non-commercial use only."])
     return DRAFTS[pick]
 
 
@@ -4872,7 +4892,7 @@ def glm_config_path(pc: dict, quant: str) -> Path:
 # the environment settings the GLM setup itself writes (or leaves out) by the PC and GPUs chosen - a setup again works
 # them out anew instead of keeping the config before's
 GLM_SETUP_ENV = ("MAYA_GLM_RESERVE_MB", "MAYA_VRAM_RESERVE_SETUP_MB", "MAYA_GLM_RAM_HEADROOM_GB", "MAYA_GLM_SPLIT",
-                 "MAYA_GLM_MTP_DECODE",
+                 "MAYA_GLM_MTP_DECODE", "MAYA_GLM_MTP_ADAPT",
                  "MAYA_GLM_PARALLEL_LOAD", "MAYA_GLM_PREFILL_SUB", "MAYA_GLM_PREFILL_MB", "MAYA_HIPBLASLT_TUNING")
 
 # the server's own settings, set in a config by hand (or with --port / --host / --api-key at a setup): every model's
@@ -4939,6 +4959,11 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
         gpus = pc["gpus"]
         if len(gpus) == 1:
             hip_env["MAYA_GLM_SPLIT"] = "0"   # two or more cards: the engine picks the split (and drafts with MTP)
+        # an APU expert helper beside the lead card, drafting with the MTP block: the length searches as the answers
+        # come (measured on the reference PC: faster there than one fixed length).  With DFlash2 the engine loads no
+        # MTP block, so it needs no such setting
+        if dflash is None and hip_helper_layout(pc):
+            hip_env["MAYA_GLM_MTP_ADAPT"] = "1"
         # GLM-5.3 on one APU: one-GPU drafting until the speed calibration measures it (g53_drafting_default)
         drafting = None if dflash is not None else g53_drafting_default(pc, pack, ctx, {**hip_env, **env})
         if drafting is not None:
@@ -4991,6 +5016,9 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
     # given now wins
     own = set(GLM_SETUP_ENV) | set(CAL.KEYS)
     forced, env = env, {**{k: v for k, v in (old_cfg.get("env") or {}).items() if N.shown(str(k)) not in own}, **env}
+    # kept conversations outlive the engine (llama-swap and the like: the next request reads only what is new, not
+    # the whole conversation again); one set by hand - to 0 too - is the user's, and an --env given now wins
+    env.setdefault("MAYA_GLM_SLOT_KEEP", "1")
     if env:
         cfg["env"] = env
     # the server's own settings from the config before (the address it listens on, its API key, ...): kept, as the

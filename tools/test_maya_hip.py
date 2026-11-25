@@ -275,6 +275,36 @@ class HipSetupTests(unittest.TestCase):
         self.a.gpu = 3
         self.assertEqual(maya.check_pc(self.a)["gpus"], [self.gpus[3]])
 
+    def test_apu_helper_mtp_drafts_adaptive_and_keeps_conversations(self):
+        # the discrete card with a Ryzen AI Max APU as its expert helper: an MTP config searches the draft length
+        # (measured there faster than one fixed length); DFlash2 loads no MTP block, so its config gets no such
+        # setting - and a setup again works the choice out anew.  Every GLM config keeps its conversations: the
+        # next request after an engine start reads only what is new
+        self.gpus.append({"index": 3, "arch": "gfx1151", "vendor": "amd", "name": "Radeon 8060S", "vram_gb": 112})
+        self.a.gpu = None
+        self.a.gpus = "1,3"
+        pc = maya.check_pc(self.a)
+        p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
+        env = maya.read_json(p)["env"]
+        self.assertEqual(env["MAYA_GLM_MTP_ADAPT"], "1")
+        self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
+        p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None,
+                              dflash=self.root / "dflash.gguf")
+        env = maya.read_json(p)["env"]
+        self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)   # (the setup's own: the earlier config's does not survive)
+        self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
+        # the drafter declined with --env on a setup again: the user's MAYA_GLM_MTP_ADAPT=0 stays theirs
+        self.a.env = ["MAYA_GLM_MTP_ADAPT=0"]
+        p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
+        self.assertEqual(maya.read_json(p)["env"]["MAYA_GLM_MTP_ADAPT"], "0")
+
+    def test_one_gpu_config_drafts_as_before_and_keeps_conversations(self):
+        pc = maya.check_pc(self.a)   # one discrete card: no helper layout, drafting as before
+        env = maya.read_json(maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192,
+                                               self.root / "data", None))["env"]
+        self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
+        self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
+
     def test_strix_halo_defaults_use_system_ram_not_vram(self):
         self.gpus.append({"index": 3, "arch": "gfx1151", "vendor": "amd",
                           "name": "AMD Radeon (gfx1151)", "vram_gb": 0.5})
@@ -345,7 +375,8 @@ class HipSetupTests(unittest.TestCase):
         self.assertEqual(maya.read_json(p)["env"], {
             "MAYA_GLM_SPLIT": "0", "MAYA_GLM_RESERVE_MB": "3072", "MAYA_GLM_RAM_HEADROOM_GB": "16",
             "MAYA_VRAM_RESERVE_SETUP_MB": "3072",   # (#1156: the reserve is the setup's own)
-            "MAYA_GLM_PREFILL_SUB": "1024", "MAYA_GLM_PREFILL_MB": "4096"})
+            "MAYA_GLM_PREFILL_SUB": "1024", "MAYA_GLM_PREFILL_MB": "4096",
+            "MAYA_GLM_SLOT_KEEP": "1"})              # (conversations outlive the engine: every GLM config)
         self.assertFalse(maya.hip_unified_memory(self.gpus[1]))
 
     def test_hip_build_enables_mmq_and_never_cuda(self):
