@@ -77,20 +77,21 @@ The setup writes most of it by itself for a GLM config on this layout:
 - `MAYA_GLM_PREFILL_SUB=4096` and `MAYA_GLM_PREFILL_MB=6144` (an EXL3 quant on an APU system with 96 GB or more);
 - `MAYA_GLM_SLOT_KEEP=1`: conversations are kept on disk between starts (`MAYA_GLM_SLOT_GB` and
   `MAYA_GLM_SLOT_DAYS` fit its budget);
-- `MAYA_GLM_MTP_FIXED=1` on an MTP config, so every start drafts at one fixed length (a `--dflash` config loads
-  no MTP block and gets none);
 - both GPUs in `"gpu"`, the faster card first; keep it that way when you edit the list by hand - with the 8060S
   first this PC read prompts at 156 tok/s instead of 540-700.
 
 What you choose or set yourself:
 
-- **the expert helper**: what a plain two-GPU config does is split the layers; all the numbers here run the 8060S
-  as the R9700's helper instead - `MAYA_GLM_EXPERT_HELPER=1`, `MAYA_GLM_HELPER_EXL3=1` (the helper reads the EXL3
-  experts) and `MAYA_GLM_SPLIT=0`;
+- **the expert helper**, experimental as upstream marks it
+  ([AMD helper setup and scope](AMD_MAYA.md#experimental-expert-helper)): what a plain two-GPU config does is
+  split the layers; all the numbers here run the 8060S as the R9700's helper instead -
+  `MAYA_GLM_EXPERT_HELPER` set to the helper's index in the `"gpu"` list (`1`, an index and not a yes/no),
+  `MAYA_GLM_HELPER_EXL3=1` (the helper reads the EXL3 experts) and `MAYA_GLM_SPLIT=0`;
 - **drafting**: DFlash2 (`--draft dflash2`) is the fastest - its license is CC BY-NC-ND 4.0, non-commercial use
-  only; without it draft with the model's own MTP block: the setup's `MAYA_GLM_MTP_FIXED=1` plus
-  `MAYA_GLM_MTP_DECODE=1`, which turns MTP drafting on for a discrete lead card beside a helper (it does not
-  turn itself on there);
+  only; without it draft with the model's own MTP block: `MAYA_GLM_MTP_DECODE=1` (a discrete lead card beside a
+  helper does not turn MTP drafting on by itself), and once the helper stands in the config a setup again writes
+  `MAYA_GLM_MTP_FIXED=1` - one fixed draft length, measured there faster than letting it search (a `--dflash`
+  config loads no MTP block and gets none);
 - **Turbo**: `MAYA_GLM_RESIDENT_TOPK` unset means all 8 experts answer, the quality choice above; Turbo 4
   (`MAYA_GLM_RESIDENT_TOPK=4`) decodes faster and that is the quality trade.
 
@@ -114,13 +115,13 @@ The engine settings these setups share (which lines a fresh setup writes by itse
 "env":   "MAYA_GLM_EXPERT_HELPER": "1", "MAYA_GLM_SPLIT": "0", "MAYA_GLM_HELPER_EXL3": "1",
          "MAYA_GLM_PREFILL_SUB": "4096", "MAYA_GLM_PREFILL_MB": "6144", "MAYA_GLM_SLOT_KEEP": "1"
          (Turbo 4: "MAYA_GLM_RESIDENT_TOPK": "4")
-"gpu":   [<R9700>, <8060S>]   - the faster card first
+"gpu":   [<R9700>, <8060S>]   - the faster card first; MAYA_GLM_EXPERT_HELPER gives the helper's index in it
 ```
 
 **The DFlash2 drafter's license is CC BY-NC-ND 4.0: non-commercial use only.** Without it, drop `--dflash` and set
 `MAYA_GLM_MTP_DECODE=1` with `MAYA_GLM_MTP_FIXED=1` (the MTP rows below): measured here, one fixed length drafts
 the same short decode as the `MAYA_GLM_MTP_ADAPT=1` search, 28-30 against 25-27 tok/s after a long prompt, and the
-same answers on every run - the setup writes it there now.
+same answers on every run - a setup writes FIXED into the helper's config as soon as it sees the helper there.
 
 ## Every measurement
 
