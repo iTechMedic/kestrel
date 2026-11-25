@@ -276,20 +276,36 @@ class HipSetupTests(unittest.TestCase):
         self.assertEqual(maya.check_pc(self.a)["gpus"], [self.gpus[3]])
 
     def test_apu_helper_mtp_drafts_at_one_and_keeps_conversations(self):
-        # the discrete card with a Ryzen AI Max APU as its expert helper: an MTP config drafts at one fixed length
-        # (measured there: the same short decode as MAYA_GLM_MTP_ADAPT=1, faster decode after a long read, and the
-        # answers stay the same on every start).  DFlash2 loads no MTP block, so its config gets no such setting,
-        # and neither does GLM-5.3 (glm-dsa), which has its own drafting's rules.  Every GLM config keeps its
-        # conversations: the next request after an engine start reads only what is new
+        # the discrete card with a Ryzen AI Max APU as its expert helper: an MTP config that runs the helper
+        # (MAYA_GLM_EXPERT_HELPER, the helper's GPU index) drafts at one fixed length - measured there: the same
+        # short decode as MAYA_GLM_MTP_ADAPT=1, faster decode after a long read, and the answers stay the same on
+        # every start.  A fresh setup's config splits the layers, where length 1 was never measured, and gets
+        # none; DFlash2 loads no MTP block, so its config gets no such setting, and neither does GLM-5.3 (glm-dsa),
+        # which has its own drafting's rules.  Every GLM config keeps its conversations: the next request after an
+        # engine start reads only what is new
         self.gpus.append({"index": 3, "arch": "gfx1151", "vendor": "amd", "name": "Radeon 8060S", "vram_gb": 112})
         self.a.gpu = None
         self.a.gpus = "1,3"
         pc = maya.check_pc(self.a)
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
         env = maya.read_json(p)["env"]
+        self.assertNotIn("MAYA_GLM_MTP_FIXED", env)   # the layer split a fresh setup writes: not measured there
+        self.assertNotIn("MAYA_GLM_EXPERT_HELPER", env)
+        self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
+        self.a.env = ["MAYA_GLM_EXPERT_HELPER=1"]     # the user puts the helper in (the "gpu" list's index)
+        p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
+        env = maya.read_json(p)["env"]
         self.assertEqual(env["MAYA_GLM_MTP_FIXED"], "1")
         self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
-        self.assertEqual(env["MAYA_GLM_SLOT_KEEP"], "1")
+        self.assertEqual(env["MAYA_GLM_EXPERT_HELPER"], "1")
+        cfg = maya.read_json(p)                       # and a setup again fixes it from the config before's helper
+        del cfg["env"]["MAYA_GLM_MTP_FIXED"]
+        p.write_text(json.dumps(cfg), encoding="utf-8")
+        self.a.env = []
+        env = maya.read_json(maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192,
+                                               self.root / "data", None))["env"]
+        self.assertEqual(env["MAYA_GLM_MTP_FIXED"], "1")
+        self.assertEqual(env["MAYA_GLM_EXPERT_HELPER"], "1")
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "testd", 8192, self.root / "data", None,
                               dflash=self.root / "dflash.gguf")   # (a config of its own: a fresh write)
         env = maya.read_json(p)["env"]
@@ -306,11 +322,11 @@ class HipSetupTests(unittest.TestCase):
         self.assertNotIn("MAYA_GLM_MTP_FIXED", env)
         self.assertNotIn("MAYA_GLM_MTP_ADAPT", env)
         # the length fixed by hand is the user's: an --env given now wins over the setup's
-        self.a.env = ["MAYA_GLM_MTP_FIXED=2"]
+        self.a.env = ["MAYA_GLM_EXPERT_HELPER=1", "MAYA_GLM_MTP_FIXED=2"]
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
         self.assertEqual(maya.read_json(p)["env"]["MAYA_GLM_MTP_FIXED"], "2")
         # and so is a config that searches its length (MAYA_GLM_MTP_ADAPT): the setup again keeps it and fixes none
-        self.a.env = ["MAYA_GLM_MTP_ADAPT=1"]
+        self.a.env = ["MAYA_GLM_EXPERT_HELPER=1", "MAYA_GLM_MTP_ADAPT=1"]
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "testadapt", 8192, self.root / "data", None)
         env = maya.read_json(p)["env"]
         self.assertEqual(env["MAYA_GLM_MTP_ADAPT"], "1")

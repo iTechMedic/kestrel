@@ -476,7 +476,19 @@ class DraftChoice(unittest.TestCase):
         helper = mtp_text({"backend": "hip", "gpus": [{"arch": "gfx1201", "name": "Radeon RX 9070 XT", "vram_gb": 16},
                                                       {"arch": "gfx1151", "name": "Radeon 8060S", "vram_gb": 108}]})
         self.assertIn("It drafts on the lead GPU", helper)
+        self.assertIn("only with the expert helper on (MAYA_GLM_EXPERT_HELPER", helper)   # the plain layer split
         self.assertIn("one GPU decodes without drafting", mtp_text({"backend": "cuda", "archs": [86]}))
+
+    def test_the_dflash_text_scopes_the_helper_numbers(self):
+        """The helper layout's +16-20% is said with the expert helper (MAYA_GLM_EXPERT_HELPER): what a fresh setup
+        writes splits the layers, where that was not measured."""
+        pc = {"backend": "hip", "gpus": [{"arch": "gfx1201", "name": "Radeon RX 9070 XT", "vram_gb": 16},
+                                          {"arch": "gfx1151", "name": "Radeon 8060S", "vram_gb": 108}]}
+        shown = []
+        with patch.object(maya, "choose",
+                          side_effect=lambda q, intro, rows, d, y, outro=(): shown.extend(rows) or 0):
+            maya.choose_draft(SimpleNamespace(draft=None, yes=True), pc, {})
+        self.assertIn("+16-20% with the expert helper on (MAYA_GLM_EXPERT_HELPER)", shown[1][2])
 
     def test_gpus_before_sm80_keep_mtp_without_asking(self):
         with patch.object(maya, "choose", side_effect=AssertionError("asked")):
