@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from glm_bench import long_doc  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--config", default=os.path.expanduser("~/kestrel/maya-glm-exl3-sc260-hip.json"))
+ap.add_argument("--config", default=os.environ.get("KESTREL_CONFIG"), required=not os.environ.get("KESTREL_CONFIG"), help="the server's config (or KESTREL_CONFIG)")
 ap.add_argument("--reps", type=int, default=2, help="copies of the 13.7K document in the first message")
 ap.add_argument("--turns", type=int, default=2)
 ap.add_argument("--state", default="")

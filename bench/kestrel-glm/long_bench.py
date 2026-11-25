@@ -4,12 +4,13 @@ the decode after it.  Each run starts with a fresh nonce, so nothing is reused. 
 import os
 import argparse, json, sys, time, urllib.request
 BENCH = os.environ.get('KESTREL_BENCH_DIR', os.path.expanduser('~/kestrel-bench'))
+os.makedirs(BENCH, exist_ok=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from glm_bench import long_doc  # noqa: E402  (13.7K tokens of tabular text)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("label")
-ap.add_argument("--config", default=os.path.expanduser("~/kestrel/maya-glm-exl3-sc260-hip.json"))
+ap.add_argument("--config", default=os.environ.get("KESTREL_CONFIG"), required=not os.environ.get("KESTREL_CONFIG"), help="the server's config (or KESTREL_CONFIG)")
 ap.add_argument("--reps", type=int, default=4, help="copies of the 13.7K document (4: about 55K tokens)")
 ap.add_argument("--out", type=int, default=256)
 a = ap.parse_args()

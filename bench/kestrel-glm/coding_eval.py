@@ -4,6 +4,7 @@ hidden edge-case tests (a subprocess per task, 20 s, in a temporary directory). 
 writes the answers to coding_<LABEL>.json."""
 import argparse, json, os, re, subprocess, sys, tempfile, time, urllib.request
 BENCH = os.environ.get('KESTREL_BENCH_DIR', os.path.expanduser('~/kestrel-bench'))
+os.makedirs(BENCH, exist_ok=True)
 
 TASKS = [
     ("parse_duration", "def parse_duration(s: str) -> int: return the seconds in a duration like '1h30m15s', '45s', "
@@ -249,7 +250,7 @@ except ValueError: pass
 
 ap = argparse.ArgumentParser()
 ap.add_argument("label")
-ap.add_argument("--config", default=os.path.expanduser("~/kestrel/maya-glm-exl3-sc260-hip.json"))
+ap.add_argument("--config", default=os.environ.get("KESTREL_CONFIG"), required=not os.environ.get("KESTREL_CONFIG"), help="the server's config (or KESTREL_CONFIG)")
 ap.add_argument("--max-tokens", type=int, default=12000)
 ap.add_argument("--effort", default="low", help="reasoning_effort (GLM: low / high)")
 a = ap.parse_args()

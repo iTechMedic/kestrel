@@ -6,6 +6,7 @@ Usage: glm_bench.py LABEL [--runs N] [--max-tokens N] [--url URL] [--config PATH
 Appends one JSON line per run to ~/kestrel-bench/results.jsonl and prints a summary.
 """
 import argparse, json, os, statistics, time, urllib.request
+BENCH = os.environ.get('KESTREL_BENCH_DIR', os.path.expanduser('~/kestrel-bench'))
 
 PROMPTS = {
     "code": "Write a Python function that parses an ISO 8601 date string without using datetime.fromisoformat, with tests.",
@@ -70,7 +71,7 @@ def main():
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--max-tokens", type=int, default=256)
     ap.add_argument("--url", default="http://127.0.0.1:8000/v1")
-    ap.add_argument("--config", default=os.path.expanduser("~/kestrel/maya-maya-s24-hip.json"))
+    ap.add_argument("--config", default=os.environ.get("KESTREL_CONFIG"), required=not os.environ.get("KESTREL_CONFIG"), help="the server's config (or KESTREL_CONFIG)")
     ap.add_argument("--no-long", action="store_true")
     a = ap.parse_args()
     cfg = json.load(open(a.config))
@@ -82,8 +83,8 @@ def main():
     tests = dict(PROMPTS)
     if not a.no_long:
         tests["long8k"] = long_doc() + "\n\nWhich carrier appears most often above? Answer briefly, then summarise the data."
-    os.makedirs(os.path.expanduser("~/kestrel-bench"), exist_ok=True)
-    out = open(os.path.expanduser("~/kestrel-bench/results.jsonl"), "a")
+    os.makedirs(BENCH, exist_ok=True)
+    out = open(os.path.join(BENCH, "results.jsonl"), "a")
     summary = {}
     for name, prompt in tests.items():
         for i in range(a.runs):

@@ -2,6 +2,7 @@
 """Quick accuracy probe: questions with known answers, greedy, thinking off.
 Usage: glm_quality.py LABEL --config PATH   (appends to ~/kestrel-bench/quality.jsonl)"""
 import argparse, json, os, re, urllib.request
+BENCH = os.environ.get('KESTREL_BENCH_DIR', os.path.expanduser('~/kestrel-bench'))
 
 QS = [
     ("What is 347 * 29? Reply with the number only.", r"\b10063\b"),
@@ -28,10 +29,10 @@ def ask(url, key, model, q):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("label")
-    ap.add_argument("--config", default=os.path.expanduser("~/kestrel/maya-maya-s24-hip.json"))
+    ap.add_argument("--config", default=os.environ.get("KESTREL_CONFIG"), required=not os.environ.get("KESTREL_CONFIG"), help="the server's config (or KESTREL_CONFIG)")
     ap.add_argument("--url", default="http://127.0.0.1:8000/v1")
     a = ap.parse_args(); cfg = json.load(open(a.config))
-    out = open(os.path.expanduser("~/kestrel-bench/quality.jsonl"), "a"); ok = 0
+    os.makedirs(BENCH, exist_ok=True); out = open(os.path.join(BENCH, "quality.jsonl"), "a"); ok = 0
     for q, pat in QS:
         ans = ask(a.url, cfg["api_key"], cfg.get("model_name", "glm-5.3-flash"), q).strip()
         good = re.search(pat, ans, re.I | re.S) is not None; ok += good

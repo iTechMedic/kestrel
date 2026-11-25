@@ -1,8 +1,9 @@
 # GLM benchmark scripts (Kestrel)
 
 The scripts behind [docs/KESTREL_GLM_EXL3.md](../../docs/KESTREL_GLM_EXL3.md). They talk to a running Kestrel server on
-`http://127.0.0.1:8000/v1`, read the API key from the server's config (`--config`, never printed) and append their
-results to `~/kestrel-bench/` (`KESTREL_BENCH_DIR` moves it). Python 3, standard library only.
+`http://127.0.0.1:8000/v1`, read the API key from the server's config (`--config`, or the `KESTREL_CONFIG`
+environment variable; the key is never printed) and append their results to `~/kestrel-bench/` (`KESTREL_BENCH_DIR`
+moves it). Python 3, standard library only.
 
 | Script | What it measures |
 | --- | --- |
@@ -16,7 +17,7 @@ results to `~/kestrel-bench/` (`KESTREL_BENCH_DIR` moves it). Python 3, standard
 | `agent_turns_test.py CFG` | a longer agent session (three files written through a tool), the wait before each turn's first token |
 | `image_session_test.py --state FILE` | a long conversation with a picture; `--state` saves it, so a run after a restart sends the same conversation back |
 | `bench_summary.py [prefix ...]` | each label's medians from `results.jsonl` |
-| `srv.sh start / stop / set K=V / unset K / exe PATH` | starts and stops a test server from a config (`CFG`, `LOG`), and edits that config's env and engine |
+| `CFG=<config> srv.sh start / stop / set K=V / unset K / exe PATH` | starts and stops a test server from a config (Linux; `KESTREL_DIR` is the checkout, default this repository; `LOG` the engine log, default the config's), and edits that config's env and engine |
 
 Models answer differently from run to run in the last bits (drafting, Turbo, the arithmetic order), so compare
 settings on several runs; a one-task difference in the coding test is noise.
