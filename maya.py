@@ -541,11 +541,90 @@ MODELS = {
                            "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
                        "GLM-5.3-Flash-vocab.gguf":
                            "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
+    # (Kestrel) turboderp's self-calibrated quant at 2.60 bits (exllamav3 1.6, codebook mul1 - the 8060S helper's
+    # MAYA_GLM_HELPER_EXL3 takes its experts): on turboderp's chart a mean KL of 0.093 against the FP model (3.05bpw
+    # 0.068, 2.05bpw 0.193), 109 GB; the MTP block is in its shards (layer 45 of the index, no mtp.safetensors).
+    # By hand only (MODELS_BY_HAND): --model EXL3-sc_2.60bpw
+    "EXL3-sc_2.60bpw": {
+        "about": "turboderp's self-calibrated EXL3 quant at 2.60 bits per weight (exllamav3's trellis format, which the "
+                 "engine reads in place from its safetensors), with the MTP draft block - NVIDIA from V100, and AMD",
+        "format": "exl3", "repo": "turboderp/GLM-5.3-Flash-exl3", "branch": "sc_2.60bpw",
+        "revision": "24781209f2862a939cc21e01d256c943bd1a58a3", "folder": "", "download_gb": 109.0,
+        "files": {
+            "config.json": 86529, "LICENSE": 1070, "README.md": 7238, "chat_template.jinja": 8617,
+            "generation_config.json": 194, "model-00001-of-00015.safetensors": 7672575228,
+            "model-00002-of-00015.safetensors": 7233151230, "model-00003-of-00015.safetensors": 7224698907,
+            "model-00004-of-00015.safetensors": 7233161727, "model-00005-of-00015.safetensors": 7233161727,
+            "model-00006-of-00015.safetensors": 7233161727, "model-00007-of-00015.safetensors": 7224705897,
+            "model-00008-of-00015.safetensors": 7233161727, "model-00009-of-00015.safetensors": 7233161727,
+            "model-00010-of-00015.safetensors": 7233161727, "model-00011-of-00015.safetensors": 7224705897,
+            "model-00012-of-00015.safetensors": 7233161727, "model-00013-of-00015.safetensors": 7233161727,
+            "model-00014-of-00015.safetensors": 7233161727, "model-00015-of-00015.safetensors": 7238816518,
+            "model.safetensors.index.json": 16343098, "processor_config.json": 909,
+            "quantization_config.json": 47978292, "tokenizer.json": 20217442, "tokenizer_config.json": 761},
+        "sha256": {
+            "config.json":
+                "d5eeea0c6668a3c34f2ba3f32a47af7ad23d7843a73b41c5cec294d65ab53bde",
+            "LICENSE":
+                "30b85b6b9659f2e78aa259f8faf5d920a68dee7c9ced3fa6dba1f19f2bc4fca1",
+            "README.md":
+                "4f46db37e6a7cbe3a494d6d7f616a96f4fffe6d1de68be361199a715c8d928fc",
+            "chat_template.jinja":
+                "41cff9af7b3a86c96751b107a8444f245fbda0bd5320b636a5bb1f7f4ba1a5c3",
+            "generation_config.json":
+                "230c30609ecbbb9e6583bedde8e7bdda0c6eb8fe5fad0eaeb3d1b293d751cb4f",
+            "model-00001-of-00015.safetensors":
+                "cd1ca38776373439e605ab92fb8bc4083a1d94a7fc76c9b8d9fd22f6049ee6be",
+            "model-00002-of-00015.safetensors":
+                "53cc659e557ec78221fc27ab7fe282799210d57270b44c97ea3a87fe9a6cb8b5",
+            "model-00003-of-00015.safetensors":
+                "1a5b61b4398a80b1b715495857491e93823f899e0f1fd2eebe4c3a987d67081f",
+            "model-00004-of-00015.safetensors":
+                "98de43425157a9049d94f0fcac2190d0d4663f54dcd29087e9811f206d338bfd",
+            "model-00005-of-00015.safetensors":
+                "ef7f5b240bf6636feb0a33059edf4e7a2a3e1593b9da15246d360840df30fa53",
+            "model-00006-of-00015.safetensors":
+                "956dbcc264d7d3338e21310b3ef8afb543ba375487057c8f00e13ea7e4d9a2d2",
+            "model-00007-of-00015.safetensors":
+                "08ed6b5fc1e8e4594b8e9ddcbb79e48396ba3bd64c37db7c7f19ba722fbfd208",
+            "model-00008-of-00015.safetensors":
+                "be9c36965037a4f3b4341b0ce31d97e1e3c14380aa9bf165d459393570657334",
+            "model-00009-of-00015.safetensors":
+                "222c7e4878c31bb394d239ee05b912b57e963fc308f9b879448b4807d3a5df12",
+            "model-00010-of-00015.safetensors":
+                "ca675ee8167dc9e27db02e1b8902d480cc96f9e8dc6d0bb576a58257334306cc",
+            "model-00011-of-00015.safetensors":
+                "d6cee4e0ad02fd3bb69bf8ac722c267ee05dacbd9869f9531e79148a810b3ea7",
+            "model-00012-of-00015.safetensors":
+                "3c1a82e88e155589e8a138b65d09fc45cfd47e56220640d648d164d34970bbd2",
+            "model-00013-of-00015.safetensors":
+                "5fdffa6db928f856e75db1effd45c8899d98c9f51a288d38aa52efbb12a57bbe",
+            "model-00014-of-00015.safetensors":
+                "a5543913ec01376b543003fa206a3b1ebccd80b15ead147e71d4991ed22afdb3",
+            "model-00015-of-00015.safetensors":
+                "c28ccd70195d25720aed236974319e51e4313562dd3b235fce6da65bff630e34",
+            "model.safetensors.index.json":
+                "cdc7911b8b9a2d0bee1e78c38f2cf9dc72fba88f47cd6010c8aa50c11eb18f28",
+            "processor_config.json":
+                "aae38374c94b08cc9b0547c6e64f05b951bd9735cea571c6988f5ed552bed3ed",
+            "quantization_config.json":
+                "51bb7b563de29bbb31f6dca24b68b52b3f81bd280c2f9a71eac605b37ebda5c7",
+            "tokenizer.json":
+                "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+            "tokenizer_config.json":
+                "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc"},
+        "vision": {
+            "repo": "peasantsmith/GLM-5.3-Flash-Maya-GGUF", "revision": "main", "folder": "vision",
+            "mmproj": "mmproj-GLM-5.3-Flash-F16.gguf", "vocab": "GLM-5.3-Flash-vocab.gguf", "download_gb": 1.14,
+            "sha256": {"mmproj-GLM-5.3-Flash-F16.gguf":
+                           "3627575df16bd152db0f3fd7e488d270b33f3a9e6c7fa3b1b8ac381faafde882",
+                       "GLM-5.3-Flash-vocab.gguf":
+                           "8f53cb1bd2e631c14ef413e3284735d9e53f3c508d07a6f609e705b487105912"}}},
 }
 # Downloads the setup's model list no longer offers (the owner, v1.1.34): they stay in MODELS, so --model EXL3-sc_4.10bpw,
 # an install's update and a config that names them work as before; the list shows one only on a PC that has it set up
 # (its default there: a setup again, --yes included, keeps the model).
-MODELS_BY_HAND = ("EXL3-sc_4.10bpw",)
+MODELS_BY_HAND = ("EXL3-sc_4.10bpw", "EXL3-sc_2.60bpw")   # (Kestrel: sc_2.60)
 # GLM-5.3 (744B, glm-dsa) downloads, in MODELS' form: offered on every backend but Metal, and kept out of MODELS itself - its list, --model's help and the dashboard's catalog stay GLM-5.3-Flash's
 # (glm_downloads() adds them).  Maya's own quant first: GLM-5.3-Maya-XS (v1.1.58; the experts in ~1.6 bits, one repo
 # per model: peasantsmith/GLM-5.3-Maya-GGUF, folder Maya-XS), then the owner's pick "for now" (2026-11-06): unsloth's
