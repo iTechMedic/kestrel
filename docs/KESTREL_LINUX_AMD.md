@@ -198,3 +198,7 @@ A setup run again then leaves your copy alone. A config can carry its own port a
   the dashboard's Monitor for where experts are read from (VRAM, helper, RAM, SSD) and for SSD reads that don't stop.
 - **If something is slow or fails:** `./kestrel.sh --report` writes a report of the PC, the config and the engine's
   speed lines and prints where it put it; attach that file to a [GitHub issue](https://github.com/iTechMedic/kestrel/issues).
+
+## GLM-5.3-Flash on this PC
+
+The quant, drafter and settings for GLM, with every measurement behind them: [KESTREL_GLM_EXL3.md](KESTREL_GLM_EXL3.md).
