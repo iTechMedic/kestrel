@@ -4984,7 +4984,7 @@ def glm_config_path(pc: dict, quant: str) -> Path:
 # the environment settings the GLM setup itself writes (or leaves out) by the PC and GPUs chosen - a setup again works
 # them out anew instead of keeping the config before's
 GLM_SETUP_ENV = ("MAYA_GLM_RESERVE_MB", "MAYA_VRAM_RESERVE_SETUP_MB", "MAYA_GLM_RAM_HEADROOM_GB", "MAYA_GLM_SPLIT",
-                 "MAYA_GLM_MTP_DECODE", "MAYA_GLM_MTP_ADAPT",
+                 "MAYA_GLM_MTP_DECODE",
                  "MAYA_GLM_PARALLEL_LOAD", "MAYA_GLM_PREFILL_SUB", "MAYA_GLM_PREFILL_MB", "MAYA_HIPBLASLT_TUNING")
 
 # the server's own settings, set in a config by hand (or with --port / --host / --api-key at a setup): every model's
@@ -5117,14 +5117,18 @@ def write_config(a, pc, meta, pack: Path, quant: str, ctx: int, models: Path, vi
     # same short decode as MAYA_GLM_MTP_ADAPT=1, a faster decode after a long read (28-30 against 25-27 tok/s) and
     # the same answers on every start.  Not for GLM-5.3 (glm-dsa), which drafts by its own rules, and not beside a
     # DFlash2 drafter, which loads no MTP block.  A length set by hand - in the config before or with --env - is
-    # the user's, and so is the one the NVIDIA calibration learned (installer.glm_draft_length)
-    if dflash is None and not dsa and hip_helper_layout(pc):
+    # the user's, and so is the one the NVIDIA calibration learned (installer.glm_draft_length); a config that
+    # searches its length (MAYA_GLM_MTP_ADAPT, kept from the config before) keeps searching
+    if dflash is None and not dsa and hip_helper_layout(pc) and "MAYA_GLM_MTP_ADAPT" not in env:
         env.setdefault("MAYA_GLM_MTP_FIXED", "1")
     # kept conversations outlive the engine (llama-swap and the like: the next request reads only what is new, not
     # the whole conversation again); one set by hand - to 0 too - is the user's, and an --env given now wins
     env.setdefault("MAYA_GLM_SLOT_KEEP", "1")
+    # the kept budget is said as the config will run it: the user's MAYA_GLM_SLOT_GB / MAYA_GLM_SLOT_DAYS, else the
+    # engine's own 16 GB / 7 days
     if str(env.get("MAYA_GLM_SLOT_KEEP")) == "1":
-        ok("conversations are kept on disk between starts: up to 16 GB of slots in the pack's folder, 7 days "
+        gb, days = env.get("MAYA_GLM_SLOT_GB", "16"), env.get("MAYA_GLM_SLOT_DAYS", "7")
+        ok(f"conversations are kept on disk between starts: up to {gb} GB of slots in the pack's folder, {days} days "
            "(MAYA_GLM_SLOT_GB, MAYA_GLM_SLOT_DAYS)")
     if env:
         cfg["env"] = env

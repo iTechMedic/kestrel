@@ -309,6 +309,17 @@ class HipSetupTests(unittest.TestCase):
         self.a.env = ["MAYA_GLM_MTP_FIXED=2"]
         p = maya.write_config(self.a, pc, {}, self.root / "pack", "test", 8192, self.root / "data", None)
         self.assertEqual(maya.read_json(p)["env"]["MAYA_GLM_MTP_FIXED"], "2")
+        # and so is a config that searches its length (MAYA_GLM_MTP_ADAPT): the setup again keeps it and fixes none
+        self.a.env = ["MAYA_GLM_MTP_ADAPT=1"]
+        p = maya.write_config(self.a, pc, {}, self.root / "pack", "testadapt", 8192, self.root / "data", None)
+        env = maya.read_json(p)["env"]
+        self.assertEqual(env["MAYA_GLM_MTP_ADAPT"], "1")
+        self.assertNotIn("MAYA_GLM_MTP_FIXED", env)   # it searches: the setup fixes no length beside it
+        self.a.env = []                               # the setup again, with no --env: the search stays, none added
+        env = maya.read_json(maya.write_config(self.a, pc, {}, self.root / "pack", "testadapt", 8192,
+                                               self.root / "data", None))["env"]
+        self.assertEqual(env["MAYA_GLM_MTP_ADAPT"], "1")
+        self.assertNotIn("MAYA_GLM_MTP_FIXED", env)
 
     def test_one_gpu_config_drafts_as_before_and_keeps_conversations(self):
         pc = maya.check_pc(self.a)   # one discrete card: no helper layout, drafting as before
