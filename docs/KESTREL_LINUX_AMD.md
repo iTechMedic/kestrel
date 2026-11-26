@@ -169,7 +169,7 @@ What each one does (more in [SETTINGS.md](SETTINGS.md)):
 | `KESTREL_DS4_LANE_SPIN_US=200` | the CPU lane's threads sleep sooner when idle, leaving the APU more of its shared power for the 8060S |
 | `KESTREL_DS4_AHEAD_EXL3=1` | while decoding, the next layer's likely experts are read ahead from the files |
 | `EXL3_WMMA=1`, `EXL3_WMMA_GFX12=1` | matrix-core prompt kernels for EXL3, including on RDNA 4 (the R9700) |
-| `DS4_INDEX_TC_GFX12=1` | the sparse attention's indexer on the R9700's matrix cores: prompts from 32K up read 5-21% faster (250K in 170 s instead of 206 s), 8K and 16K 1-2% faster, answers the same speed. The log says "the indexer's scores on the WMMAs" at the first prompt |
+| `DS4_INDEX_TC_GFX12=1` | the sparse attention's indexer on the R9700's matrix cores: prompts from 64K up read 7-21% faster (250K in 170 s instead of 206 s), shorter ones 1-3% faster, answers the same speed. The log says "the indexer's scores on the WMMAs" at the first prompt |
 | `KESTREL_DS4_SLOT_KEEP=1` | conversations are kept across requests and restarts, so a returning agent session isn't read again |
 | `DS4_ENGRAM_PREFETCH=1`, `DS4_ENGRAM_CACHE_MB=4096` | a prompt's Engram rows are read ahead, with a 4 GB cache of them |
 | `KESTREL_DS4_SPEC_STAGED=1`, `KESTREL_DS4_SPEC_STAGED_MIN=4096` | in prompt chunks of 4,096 rows or more, a layer's first experts are copied while its attention still runs |

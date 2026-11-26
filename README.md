@@ -115,9 +115,9 @@ context, DSpark drafting on, swap off (at this context it fits in RAM, and it is
 |---:|---:|---:|---:|
 | 8K | 848 | 56.5 | 840 / 57.0 |
 | 16K | 1,170 | 59.3 | 1,150 / 61.7 |
-| 32K | 1,431 | 48.1 | 1,365 / 59.0 |
+| 32K | 1,399 | 55.9 | 1,365 / 59.0 |
 | 64K | 1,538 | 66.2 | 1,443 / 48.2 |
-| 128K | 1,505 | 37.6 | 1,412 / 53.9 |
+| 128K | 1,590 | 53.6 | 1,412 / 53.9 |
 | 192K | 1,524 | 50.1 | 1,313 / 45.8 |
 | **250K** | **1,477** | **47.2** | **1,217 / 52.5** |
 
@@ -127,18 +127,19 @@ at about 50 tokens/s.
 **The indexer on the matrix cores:** `DS4_INDEX_TC_GFX12=1`, in the tuned config since 2026-11-25, runs the sparse
 attention's indexer (it scores every earlier token of the context for each new one) on the R9700's matrix cores. Its
 work grows with the square of the prompt's length, so it pays off on long prompts: at 250K the indexer took 30 s
-instead of 66 s, at 8K 0.22 s instead of 0.33 s. Prompts are read 5-21% faster from 32K up and 1-2% faster at 8K and
-16K. It multiplies the same values as the default kernel and only adds them up in another order, so the last
+instead of 66 s, at 8K 0.22 s instead of 0.33 s. Prompts are read 7-21% faster from 64K up and 1-3% faster up to
+32K. It multiplies the same values as the default kernel and only adds them up in another order, so the last
 bits differ and a long greedy answer can part from the default kernel's after a while, but the quality is the same
 (upstream's measurement of the RDNA 3 version, on by default there: KL to the full-precision model 0.1649 against
 0.1661, the same top token 91.08% against 91.07%). Leave it out of the config for the default kernel.
 
 How: fresh prompts with a fact to recall placed 10% in (recalled at every length, with and without the switch),
-256-token answers, greedy, thinking off. 32K to 250K: the second of two passes on one start; the column on the right
-is the same sweep earlier the same day without the switch. 8K and 16K: the medians of three warm runs each, after a
-fresh start, with and without the switch one after the other (the sweep's own short runs, right after the 250K
+256-token answers, greedy, thinking off. 32K to 250K: the second of two passes on one start (32K and 128K: the
+medians of three warm runs afterwards - the sweep's own answers there came at 48.1 and 37.6 tokens/s; now and then a
+single answer decodes slower, with or without the switch); the column on the right is the same sweep earlier the
+same day without the switch. 8K and 16K: the medians of three warm runs each, after a fresh start, with and without the switch one after the other (the sweep's own short runs, right after the 250K
 prompts, came out 3-5% slower with the switch; back to back they were not, and the profiler shows its indexer faster
-at 8K and 16K too). Decode is the same on average (51.4 against 53.5 tokens/s from 16K up): the time per decoding
+at 8K and 16K too). Decode is the same on average (55.4 against 53.5 tokens/s from 16K up): the time per decoding
 round was the same, and a single answer's speed moves by 10 tokens/s or more with how many drafts it keeps. The
 config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own settings, and your numbers will
 depend on your GPUs, RAM and SSD. **To set up the same way** - the Linux settings, the install and the tuned config,
