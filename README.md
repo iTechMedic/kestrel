@@ -113,8 +113,8 @@ context, DSpark drafting on, swap off (at this context it fits in RAM, and it is
 
 | Prompt length | Prompt read (tokens/s) | Decode (tokens/s) | Without `DS4_INDEX_TC_GFX12`: read / decode |
 |---:|---:|---:|---:|
-| 8K | 783 | 61.2 | 824 / 61.7 |
-| 16K | 1,113 | 61.8 | 1,152 / 61.8 |
+| 8K | 848 | 56.5 | 840 / 57.0 |
+| 16K | 1,170 | 59.3 | 1,150 / 61.7 |
 | 32K | 1,431 | 48.1 | 1,365 / 59.0 |
 | 64K | 1,538 | 66.2 | 1,443 / 48.2 |
 | 128K | 1,505 | 37.6 | 1,412 / 53.9 |
@@ -127,19 +127,22 @@ at about 50 tokens/s.
 **The indexer on the matrix cores:** `DS4_INDEX_TC_GFX12=1`, in the tuned config since 2026-11-25, runs the sparse
 attention's indexer (it scores every earlier token of the context for each new one) on the R9700's matrix cores. Its
 work grows with the square of the prompt's length, so it pays off on long prompts: at 250K the indexer took 30 s
-instead of 66 s. From 32K up prompts are read 5-21% faster; 8K and 16K are read 3-5% slower (about 0.5 s on an 8K
-prompt). It multiplies the same values as the default kernel and only adds them up in another order, so the last
+instead of 66 s, at 8K 0.22 s instead of 0.33 s. Prompts are read 5-21% faster from 32K up and 1-2% faster at 8K and
+16K. It multiplies the same values as the default kernel and only adds them up in another order, so the last
 bits differ and a long greedy answer can part from the default kernel's after a while, but the quality is the same
 (upstream's measurement of the RDNA 3 version, on by default there: KL to the full-precision model 0.1649 against
 0.1661, the same top token 91.08% against 91.07%). Leave it out of the config for the default kernel.
 
 How: fresh prompts with a fact to recall placed 10% in (recalled at every length, with and without the switch),
-256-token answers, greedy, thinking off; the second of two passes on one start; 8K and 16K are the medians of six warm
-runs each. The column on the right is the same sweep earlier the same day without the switch. Decode is the same on
-average (51.8 against 53.5 tokens/s from 16K up): the time per decoding round was the same, and a single answer's
-speed moves by 10 tokens/s or more with how many drafts it keeps. The config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own
-settings, and your numbers will depend on your GPUs, RAM and SSD. **To set up the same way** - the Linux settings, the
-install and the tuned config, step by step: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).
+256-token answers, greedy, thinking off. 32K to 250K: the second of two passes on one start; the column on the right
+is the same sweep earlier the same day without the switch. 8K and 16K: the medians of three warm runs each, after a
+fresh start, with and without the switch one after the other (the sweep's own short runs, right after the 250K
+prompts, came out 3-5% slower with the switch; back to back they were not, and the profiler shows its indexer faster
+at 8K and 16K too). Decode is the same on average (51.4 against 53.5 tokens/s from 16K up): the time per decoding
+round was the same, and a single answer's speed moves by 10 tokens/s or more with how many drafts it keeps. The
+config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own settings, and your numbers will
+depend on your GPUs, RAM and SSD. **To set up the same way** - the Linux settings, the install and the tuned config,
+step by step: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).
 
 The first short prompt after a long pause, or right after a very long prompt, is slower once while the caches fill
 again: an 8K prompt then took 17-26 s instead of about 10 s.
@@ -185,7 +188,7 @@ can look slow while the answers come quickly:
   log showed that read as about 110 tokens/s. What you wait for is the 1.1 s.
 - **Short reads are slower per token.** Each pass over a prompt has a cost that hardly depends on its length:
   every layer's experts have to reach the GPUs (most of this model does not fit in VRAM; the rest comes from RAM and
-  the SSD). Spread over more tokens, it costs less a token: the table above reads 8K tokens at 783 tokens/s and 64K
+  the SSD). Spread over more tokens, it costs less a token: the table above reads 8K tokens at 848 tokens/s and 64K
   at 1,538. A tool output of a few hundred tokens takes a second or two, however low its tokens/s.
 - **Cold starts are slower.** The first prompts after a start read experts from the SSD until the caches fill.
 - **Kept conversations aren't read again.** With `KESTREL_DS4_SLOT_KEEP=1` (in the tuned config) a conversation
