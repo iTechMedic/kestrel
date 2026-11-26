@@ -17,7 +17,7 @@ Kestrel is a fork of [Project Maya](https://github.com/mw00/project-maya) by Pea
 updater, and engine work for AMD GPUs - DeepSeek-V4.1-Flash on a Radeon card with a Ryzen AI Max's Radeon 8060S as a
 helper GPU, at contexts up to 256K. What each release changes: [releases](https://github.com/iTechMedic/kestrel/releases).
 
-- **Fast at long contexts:** a 250K-token prompt read at 1,217 tokens/s and answered at 52 tokens/s on a Radeon AI PRO
+- **Fast at long contexts:** a 250K-token prompt read at 1,477 tokens/s and answered at about 50 tokens/s on a Radeon AI PRO
   R9700 with a Radeon 8060S helper ([how it was measured](#how-fast-is-it)).
 - **Plugs into your tools:** OpenAI- and Anthropic-compatible API with tool calls, ready for coding agents.
 - **Several requests at once:** up to 8 answered together with GLM-5.3-Flash, DeepSeek-V4.1-Flash and
@@ -111,23 +111,33 @@ Kestrel's own measurements. Measured 2026-11-25 (Project Maya v1.1.81's code) on
 ROCm. Model: DeepSeek-V4.1-Flash-1017, turboderp's EXL3 quant at 2.25 bits (`--ds4-quant exl3-2.25`), 262,144-token
 context, DSpark drafting on, swap off (at this context it fits in RAM, and it is faster).
 
-| Prompt length | Prompt read (tokens/s) | Decode (tokens/s) | 2026-11-20: read / decode |
+| Prompt length | Prompt read (tokens/s) | Decode (tokens/s) | Without `DS4_INDEX_TC_GFX12`: read / decode |
 |---:|---:|---:|---:|
-| 8K | 824 | 61.7 | 797 / 57.8 |
-| 16K | 1,152 | 61.8 | 1,156 / 57.8 |
-| 32K | 1,365 | 59.0 | 1,385 / 53.6 |
-| 64K | 1,443 | 48.2 | 1,426 / 54.1 |
-| 128K | 1,412 | 53.9 | 1,416 / 49.8 |
-| 192K | 1,313 | 45.8 | 1,313 / 49.0 |
-| **250K** | **1,217** | **52.5** | **1,217 / 51.0** |
+| 8K | 783 | 61.2 | 824 / 61.7 |
+| 16K | 1,113 | 61.8 | 1,152 / 61.8 |
+| 32K | 1,431 | 48.1 | 1,365 / 59.0 |
+| 64K | 1,538 | 66.2 | 1,443 / 48.2 |
+| 128K | 1,505 | 37.6 | 1,412 / 53.9 |
+| 192K | 1,524 | 50.1 | 1,313 / 45.8 |
+| **250K** | **1,477** | **47.2** | **1,217 / 52.5** |
 
-A 250,282-token prompt is read in about 3.5 minutes (206 s), and the answer then comes at about 52 tokens/s.
+A 250,282-token prompt is read in under 3 minutes (170 s, against 206 s without the switch), and the answer then comes
+at about 50 tokens/s.
 
-How: fresh prompts with a fact to recall placed 10% in (recalled at every length), 256-token answers, greedy, thinking
-off; the second of two passes on one start; 8K and 16K are the medians of six warm runs each. Against the first
-measurement (2026-11-20, same PC and config): prompt reading the same within 2% from 16K up and 3% faster at 8K, decode
-the same on average (53.5 against 52.6 tokens/s from 16K up; a single answer's speed moves by about 5 tokens/s with how
-many drafts it keeps). The config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own
+**The indexer on the matrix cores:** `DS4_INDEX_TC_GFX12=1`, in the tuned config since 2026-11-25, runs the sparse
+attention's indexer (it scores every earlier token of the context for each new one) on the R9700's matrix cores. Its
+work grows with the square of the prompt's length, so it pays off on long prompts: at 250K the indexer took 30 s
+instead of 66 s. From 32K up prompts are read 5-21% faster; 8K and 16K are read 3-5% slower (about 0.5 s on an 8K
+prompt). It multiplies the same values as the default kernel and only adds them up in another order, so the last
+bits differ and a long greedy answer can part from the default kernel's after a while, but the quality is the same
+(upstream's measurement of the RDNA 3 version, on by default there: KL to the full-precision model 0.1649 against
+0.1661, the same top token 91.08% against 91.07%). Leave it out of the config for the default kernel.
+
+How: fresh prompts with a fact to recall placed 10% in (recalled at every length, with and without the switch),
+256-token answers, greedy, thinking off; the second of two passes on one start; 8K and 16K are the medians of six warm
+runs each. The column on the right is the same sweep earlier the same day without the switch. Decode is the same on
+average (51.8 against 53.5 tokens/s from 16K up): the time per decoding round was the same, and a single answer's
+speed moves by 10 tokens/s or more with how many drafts it keeps. The config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own
 settings, and your numbers will depend on your GPUs, RAM and SSD. **To set up the same way** - the Linux settings, the
 install and the tuned config, step by step: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).
 
@@ -175,8 +185,8 @@ can look slow while the answers come quickly:
   log showed that read as about 110 tokens/s. What you wait for is the 1.1 s.
 - **Short reads are slower per token.** Each pass over a prompt has a cost that hardly depends on its length:
   every layer's experts have to reach the GPUs (most of this model does not fit in VRAM; the rest comes from RAM and
-  the SSD). Spread over more tokens, it costs less a token: the table above reads 8K tokens at 797 tokens/s and 64K
-  at 1,426. A tool output of a few hundred tokens takes a second or two, however low its tokens/s.
+  the SSD). Spread over more tokens, it costs less a token: the table above reads 8K tokens at 783 tokens/s and 64K
+  at 1,538. A tool output of a few hundred tokens takes a second or two, however low its tokens/s.
 - **Cold starts are slower.** The first prompts after a start read experts from the SSD until the caches fill.
 - **Kept conversations aren't read again.** With `KESTREL_DS4_SLOT_KEEP=1` (in the tuned config) a conversation
   is kept across requests and restarts, so an agent session that comes back is not read again at all.

@@ -2,7 +2,7 @@
 
 This is how Kestrel's reference PC is set up, and how to get the numbers in the
 [README](../README.md#how-fast-is-it) on yours: DeepSeek-V4.1-Flash-1017 at a 262,144-token context, a 250K-token
-prompt read at about 1,200 tokens/s and answered at about 52 tokens/s.
+prompt read at about 1,480 tokens/s and answered at about 50 tokens/s.
 
 Everything here is what runs on that PC today. Some of it is specific to its hardware (an external GPU on OCuLink, a
 Kingston NVMe drive): those steps say so. Change one thing at a time and measure (see [Check it](#6-check-it)).
@@ -140,7 +140,7 @@ the setup or the dashboard later saves the file, it writes these settings back u
   "KESTREL_DS4_FLOW_HELPER": "1", "KESTREL_DS4_WARM_CAP_GB": "14", "KESTREL_DS4_DSPARK_CUM": "0.2",
   "KESTREL_DS4_PROMPT_PICK": "length:1024", "KESTREL_DS4_ROUTE_FUSE": "2", "KESTREL_DS4_DECODE_TRIM": "12",
   "KESTREL_DS4_LANE_SPIN_US": "200", "KESTREL_DS4_RESIDENT_TOPK": "3", "KESTREL_DS4_AHEAD_EXL3": "1",
-  "EXL3_WMMA": "1", "EXL3_WMMA_GFX12": "1",
+  "EXL3_WMMA": "1", "EXL3_WMMA_GFX12": "1", "DS4_INDEX_TC_GFX12": "1",
   "DS4_RING_MB": "auto", "DS4_STREAM_PRIO": "0", "KESTREL_DS4_SLOT_KEEP": "1",
   "DS4_ENGRAM_PREFETCH": "1", "DS4_ENGRAM_CACHE_MB": "4096",
   "KESTREL_DS4_SPEC_STAGED": "1", "KESTREL_DS4_SPEC_STAGED_MIN": "4096",
@@ -151,7 +151,8 @@ the setup or the dashboard later saves the file, it writes these settings back u
 > **One of these changes the answers:** `KESTREL_DS4_RESIDENT_TOPK=3` computes only the 3 heaviest of each decoded
 > token's 6 routed experts. It makes decoding faster and the answers slightly different from the full model (like the
 > dashboard's Turbo button does). Leave it out for the model's exact answers. Everything else here gives the same
-> answers as without it.
+> answers as without it, except that `DS4_INDEX_TC_GFX12=1` adds the indexer's scores up in another order: the last
+> bits differ, so a long greedy answer can part from the default kernel's after a while, at the same quality.
 
 What each one does (more in [SETTINGS.md](SETTINGS.md)):
 
@@ -168,6 +169,7 @@ What each one does (more in [SETTINGS.md](SETTINGS.md)):
 | `KESTREL_DS4_LANE_SPIN_US=200` | the CPU lane's threads sleep sooner when idle, leaving the APU more of its shared power for the 8060S |
 | `KESTREL_DS4_AHEAD_EXL3=1` | while decoding, the next layer's likely experts are read ahead from the files |
 | `EXL3_WMMA=1`, `EXL3_WMMA_GFX12=1` | matrix-core prompt kernels for EXL3, including on RDNA 4 (the R9700) |
+| `DS4_INDEX_TC_GFX12=1` | the sparse attention's indexer on the R9700's matrix cores: prompts from 32K up read 5-21% faster (250K in 170 s instead of 206 s), 8K and 16K 3-5% slower, answers the same speed. The log says "the indexer's scores on the WMMAs" at the first prompt |
 | `KESTREL_DS4_SLOT_KEEP=1` | conversations are kept across requests and restarts, so a returning agent session isn't read again |
 | `DS4_ENGRAM_PREFETCH=1`, `DS4_ENGRAM_CACHE_MB=4096` | a prompt's Engram rows are read ahead, with a 4 GB cache of them |
 | `KESTREL_DS4_SPEC_STAGED=1`, `KESTREL_DS4_SPEC_STAGED_MIN=4096` | in prompt chunks of 4,096 rows or more, a layer's first experts are copied while its attention still runs |
