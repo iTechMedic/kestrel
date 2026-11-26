@@ -2,7 +2,7 @@
 
 This is how Kestrel's reference PC is set up, and how to get the numbers in the
 [README](../README.md#how-fast-is-it) on yours: DeepSeek-V4.1-Flash-1017 at a 262,144-token context, a 250K-token
-prompt read at about 1,200 tokens/s and answered at about 51 tokens/s.
+prompt read at about 1,200 tokens/s and answered at about 52 tokens/s.
 
 Everything here is what runs on that PC today. Some of it is specific to its hardware (an external GPU on OCuLink, a
 Kingston NVMe drive): those steps say so. Change one thing at a time and measure (see [Check it](#6-check-it)).

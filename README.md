@@ -17,7 +17,7 @@ Kestrel is a fork of [Project Maya](https://github.com/mw00/project-maya) by Pea
 updater, and engine work for AMD GPUs - DeepSeek-V4.1-Flash on a Radeon card with a Ryzen AI Max's Radeon 8060S as a
 helper GPU, at contexts up to 256K. What each release changes: [releases](https://github.com/iTechMedic/kestrel/releases).
 
-- **Fast at long contexts:** a 250K-token prompt read at 1,217 tokens/s and answered at 51 tokens/s on a Radeon AI PRO
+- **Fast at long contexts:** a 250K-token prompt read at 1,217 tokens/s and answered at 52 tokens/s on a Radeon AI PRO
   R9700 with a Radeon 8060S helper ([how it was measured](#how-fast-is-it)).
 - **Plugs into your tools:** OpenAI- and Anthropic-compatible API with tool calls, ready for coding agents.
 - **Several requests at once:** up to 8 answered together with GLM-5.3-Flash, DeepSeek-V4.1-Flash and
@@ -106,27 +106,33 @@ is checked against the engine before it - the same prompts, compared token by to
 
 ## How fast is it?
 
-Kestrel's own measurements. Measured 2026-11-20 on one PC: a Radeon AI PRO R9700 (32 GB, over OCuLink) with a Ryzen AI
-MAX+ 395's Radeon 8060S as the helper GPU (128 GB of unified memory), Linux with ROCm. Model: DeepSeek-V4.1-Flash-1017,
-turboderp's EXL3 quant at 2.25 bits (`--ds4-quant exl3-2.25`), 262,144-token context, DSpark drafting on, swap off
-(at this context it fits in RAM, and it is faster).
+Kestrel's own measurements. Measured 2026-11-25 (Project Maya v1.1.81's code) on one PC: a Radeon AI PRO R9700
+(32 GB, over OCuLink) with a Ryzen AI MAX+ 395's Radeon 8060S as the helper GPU (128 GB of unified memory), Linux with
+ROCm. Model: DeepSeek-V4.1-Flash-1017, turboderp's EXL3 quant at 2.25 bits (`--ds4-quant exl3-2.25`), 262,144-token
+context, DSpark drafting on, swap off (at this context it fits in RAM, and it is faster).
 
-| Prompt length | Prompt read (tokens/s) | Decode (tokens/s) |
-|---:|---:|---:|
-| 8K | 797 | 57.8 |
-| 16K | 1,156 | 57.8 |
-| 32K | 1,385 | 53.6 |
-| 64K | 1,426 | 54.1 |
-| 128K | 1,416 | 49.8 |
-| 192K | 1,313 | 49.0 |
-| **250K** | **1,217** | **51.0** |
+| Prompt length | Prompt read (tokens/s) | Decode (tokens/s) | 2026-11-20: read / decode |
+|---:|---:|---:|---:|
+| 8K | 824 | 61.7 | 797 / 57.8 |
+| 16K | 1,152 | 61.8 | 1,156 / 57.8 |
+| 32K | 1,365 | 59.0 | 1,385 / 53.6 |
+| 64K | 1,443 | 48.2 | 1,426 / 54.1 |
+| 128K | 1,412 | 53.9 | 1,416 / 49.8 |
+| 192K | 1,313 | 45.8 | 1,313 / 49.0 |
+| **250K** | **1,217** | **52.5** | **1,217 / 51.0** |
 
-A 250,282-token prompt is read in about 3.5 minutes (206-208 s), and the answer then comes at about 51 tokens/s.
+A 250,282-token prompt is read in about 3.5 minutes (206 s), and the answer then comes at about 52 tokens/s.
 
 How: fresh prompts with a fact to recall placed 10% in (recalled at every length), 256-token answers, greedy, thinking
-off; the second of two passes on one start. The config was tuned by hand for this PC: a fresh `./kestrel.sh` setup
-chooses its own settings, and your numbers will depend on your GPUs, RAM and SSD. **To set up the same way** - the
-Linux settings, the install and the tuned config, step by step: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).
+off; the second of two passes on one start; 8K and 16K are the medians of six warm runs each. Against the first
+measurement (2026-11-20, same PC and config): prompt reading the same within 2% from 16K up and 3% faster at 8K, decode
+the same on average (53.5 against 52.6 tokens/s from 16K up; a single answer's speed moves by about 5 tokens/s with how
+many drafts it keeps). The config was tuned by hand for this PC: a fresh `./kestrel.sh` setup chooses its own
+settings, and your numbers will depend on your GPUs, RAM and SSD. **To set up the same way** - the Linux settings, the
+install and the tuned config, step by step: [docs/KESTREL_LINUX_AMD.md](docs/KESTREL_LINUX_AMD.md).
+
+The first short prompt after a long pause, or right after a very long prompt, is slower once while the caches fill
+again: an 8K prompt then took 17-26 s instead of about 10 s.
 
 Measured yours? `./kestrel.sh --bench`, then `./kestrel.sh --report`, and share both in a
 [GitHub issue](https://github.com/iTechMedic/kestrel/issues).
