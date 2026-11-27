@@ -161,6 +161,8 @@ struct Stats {
     int64_t prof_tokens = 0;         // shared expert, experts' gate / up, the wait for the CPU lane, down + post; then
                                      // the attention's parts: 6 Engram, 7 split + projections + q, 8 its core - 1 is
                                      // the rest of it, its output's projections and hc_post)
+    double prof_dev_ms[2][18] = {};  // (the same by CUDA0 / CUDA1 apart) and the profiled steps' rows in all
+    int64_t prof_rows = 0;
     // lookahead (decode windows of one): the picks of layers guessed a layer before (the next layer's gate on this
     // layer's FFN input), of them in the guess's top k / in all its guesses / in the guess two layers before; the picks
     // read from the files, of them prefetched early; experts prefetched early
